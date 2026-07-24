@@ -8,7 +8,8 @@
 A small collection of command-line tools for a Krea 2 / ComfyUI LoKr workflow:
 inspect and edit LoRA `.safetensors` metadata, embed or strip ComfyUI workflow
 metadata in images, and plan multi-resolution training runs. Most of it is
-format-agnostic and pure stdlib; only the image/dataset tools need Pillow.
+format-agnostic and pure stdlib; only the image/dataset tools need Pillow, and
+the weight-health tool needs numpy.
 
 ## Quick start
 
@@ -25,6 +26,7 @@ uv run tools/inspect_lora.py path/to/lora.safetensors
 | Tool | Purpose |
 |------|---------|
 | `inspect_lora.py` | Identify a LoRA's convention / math format and dump its metadata |
+| `lora_health.py` | Reconstruct each module's ΔW and flag dead / fried / over-cooked layers |
 | `edit_metadata.py` | Edit `__metadata__` — ModelSpec fields and arbitrary keys |
 | `metadata_ui.py` | Local web UI for viewing and editing metadata |
 | `embed_workflow.py` | Embed a ComfyUI workflow into an image |
@@ -47,7 +49,8 @@ Everything lives in [`docs/`](docs/):
 ## Requirements
 
 - Python ≥ 3.13 and [uv](https://docs.astral.sh/uv/)
-- Pillow — only for the image/dataset tools, fetched automatically by `uv run`
+- Pillow (image/dataset tools) and numpy (`lora_health.py`) — fetched
+  automatically by `uv run`
 
 ## License
 

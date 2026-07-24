@@ -6,6 +6,7 @@ dependencies, so `uv` fetches what it needs on first use (only the image/dataset
 tools pull in Pillow). Every script also has a `--help`.
 
 - [Inspect LoRA metadata](#inspect-lora-metadata) — `inspect_lora.py`
+- [LoRA weight health](#lora-weight-health-toolslora_healthpy) — `lora_health.py`
 - [Editing metadata](#editing-metadata-toolsedit_metadatapy) — `edit_metadata.py`
 - [Metadata UI](#metadata-ui) — `metadata_ui.py`
 - [Embedding a ComfyUI workflow](#embedding-a-comfyui-workflow-toolsembed_workflowpy) — `embed_workflow.py`
@@ -24,6 +25,54 @@ uv run tools/inspect_lora.py path/to/lora.safetensors
 uv run tools/inspect_lora.py path/to/lora.safetensors --grep txtfusion  # filter keys
 uv run tools/inspect_lora.py path/to/lora.safetensors --raw             # every key, untruncated meta
 ```
+
+## LoRA weight health (`tools/lora_health.py`)
+
+Where `inspect_lora.py` reads only the header, `tools/lora_health.py` decodes the
+tensor **data**, reconstructs each module's effective delta-weight (ΔW) — folding
+the low-rank factors and the `alpha/rank` scale back together — and reports the
+numbers that actually track training quality:
+
+- **‖ΔW‖_F** — the effective magnitude of a module's change to the base weights
+- **σ_max** — its largest singular value (peak per-direction strength)
+- **stable rank** — `‖ΔW‖_F² / σ_max²` ([Rudelson & Vershynin,
+  2007](https://doi.org/10.1145/1255443.1255449)); ≈1 means the update collapsed
+  onto a single direction, high means it stays spread across many directions
+
+From those it flags the failure modes a metadata dump can't see:
+
+- **non-finite** — any `NaN`/`Inf` value, i.e. a diverged / "fried" run
+- **dead** — effective `‖ΔW‖_F` at or below `--dead-threshold` (never trained)
+- **suspect** — large `‖ΔW‖_F` **and** low stable rank (`--outlier-factor`,
+  `--collapse-rank`): the update is both strong and collapsed, a candidate
+  over-cooked layer
+
+```bash
+uv run tools/lora_health.py path/to/lora.safetensors
+uv run tools/lora_health.py path/to/lora.safetensors --all     # every module
+uv run tools/lora_health.py path/to/lora.safetensors --json    # machine-readable
+uv run tools/lora_health.py path/to/lora.safetensors --grep attn
+```
+
+Reconstruction is exact for classic LoRA (`down`/`up`, `A`/`B`), LoKr, and LoHa;
+the `alpha/rank` scale is applied when both are recoverable (shown per module).
+`F32`/`F16`/`BF16`/`F64` are decoded; float8 and other exotic dtypes are skipped.
+It reads the whole file (slower than `inspect_lora.py`, fine for the tens-of-MB
+files here) and needs **numpy** for the SVD — `uv run` fetches it automatically.
+**Exit status is `1` when any module is non-finite**, so it doubles as a CI gate.
+
+> **Basis and caveat.** The stable-rank metric is standard linear algebra
+> ([Rudelson & Vershynin, 2007](https://doi.org/10.1145/1255443.1255449)), but
+> reading a "strong + collapsed" module as *over-cooked* is a **heuristic, not a
+> validated result** — no paper establishes it for LoRAs. Spectral shape is only
+> *indirectly* tied to training quality in the literature (e.g. Martin &
+> Mahoney's heavy-tailed self-regularisation / `WeightWatcher`), and the flag has
+> both false positives (a legitimately focused, low-rank adaptation) and false
+> negatives (a LoRA fried diffusely across many directions). Weight statistics
+> can *suggest* over-cooking but can't prove it — the ground truth is behavioural
+> (a strength sweep, prompt-adherence, and training-set memorisation checks; see
+> [monitoring training](monitoring-training.md)). Treat **suspect** as "look
+> here," not a verdict.
 
 ## Editing metadata (`tools/edit_metadata.py`)
 
