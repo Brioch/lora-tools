@@ -1,6 +1,7 @@
 # LoRA tools
 
 [![CI](https://github.com/Brioch/lora-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/Brioch/lora-tools/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/Brioch/ab179799bf4df9083c5a72975b6e6c14/raw/lora-tools-coverage.json)](https://github.com/Brioch/lora-tools/actions/workflows/ci.yml)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENCE)
 
