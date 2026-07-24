@@ -7,6 +7,7 @@ tools pull in Pillow). Every script also has a `--help`.
 
 - [Inspect LoRA metadata](#inspect-lora-metadata) — `inspect_lora.py`
 - [LoRA weight health](#lora-weight-health-toolslora_healthpy) — `lora_health.py`
+- [Checkpoint health sweep](#checkpoint-health-sweep-toolshealth_sweeppy) — `health_sweep.py`
 - [Editing metadata](#editing-metadata-toolsedit_metadatapy) — `edit_metadata.py`
 - [Metadata UI](#metadata-ui) — `metadata_ui.py`
 - [Embedding a ComfyUI workflow](#embedding-a-comfyui-workflow-toolsembed_workflowpy) — `embed_workflow.py`
@@ -73,6 +74,52 @@ files here) and needs **numpy** for the SVD — `uv run` fetches it automaticall
 > (a strength sweep, prompt-adherence, and training-set memorisation checks; see
 > [monitoring training](monitoring-training.md)). Treat **suspect** as "look
 > here," not a verdict.
+
+## Checkpoint health sweep (`tools/health_sweep.py`)
+
+Where `lora_health.py` reports one file, `tools/health_sweep.py` runs the **same
+analysis across many checkpoints** and lays the results out one row per epoch, so
+you can see the *trajectory* — where the adapter saturates and whether it's
+collapsing. It reuses `lora_health`'s own reconstruction and flag logic (imports
+`collect` and `_flags`), so every number matches `lora_health.py` exactly.
+
+Point it at a directory, a glob, or a list of files:
+
+```bash
+uv run tools/health_sweep.py path/to/checkpoints/           # recurse a directory
+uv run tools/health_sweep.py 'runs/**/*.safetensors' --grep attn
+uv run tools/health_sweep.py ckpts/ --csv > trajectory.csv  # for plotting
+```
+
+Each row summarises the spread across modules — `‖ΔW‖_F` (min/median/max), stable
+rank (min/median/max) — plus the per-checkpoint **non-finite / dead / suspect**
+counts, followed by a short structural *read*:
+
+- **`‖ΔW‖_F` median climbing then flattening** → the adapter saturated; later
+  epochs add magnitude but little new signal.
+- **stable-rank median falling** across epochs → updates collapsing onto fewer
+  directions, the structural fingerprint of over-cooking.
+
+Epoch labels are parsed from the filename (`epoch40`, `-e12`, `step_1200`,
+`-000060.safetensors`, …). If parsing can't find a distinct number per file — e.g.
+timestamped names like `2026-07-24_19-19-03-save-760-40-0.safetensors`, where the
+trailing field is constant — it **warns, falls back to filename order, and shows a
+filename column** so the ordering stays verifiable. Point it at the right field
+with `--epoch-regex` (one capture group; use `=` so a leading `-` isn't read as a
+flag):
+
+```bash
+uv run tools/health_sweep.py ckpts/ --epoch-regex='-(\d+)-\d+\.safetensors$'  # the 40 in -save-760-40-0
+uv run tools/health_sweep.py ckpts/ --files                                   # always show filenames
+```
+
+`--dead-threshold`, `--outlier-factor`, and `--collapse-rank` pass straight
+through to the same flag logic as `lora_health.py`. Same **structural-only**
+caveat applies: this shows where the adapter saturates and whether it's
+collapsing, **not** whether a checkpoint nails the concept — pair it with the
+generation/validation checks in [monitoring training](monitoring-training.md), and
+see [LoKr training: dim, alpha, and factor](lokr-dim-and-alpha.md) for what a
+healthy damped-LoKr trajectory looks like.
 
 ## Editing metadata (`tools/edit_metadata.py`)
 

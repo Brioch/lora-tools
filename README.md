@@ -27,6 +27,7 @@ uv run tools/inspect_lora.py path/to/lora.safetensors
 |------|---------|
 | `inspect_lora.py` | Identify a LoRA's convention / math format and dump its metadata |
 | `lora_health.py` | Reconstruct each module's ΔW and flag dead / fried / over-cooked layers |
+| `health_sweep.py` | Run `lora_health` across many checkpoints and show the trajectory |
 | `edit_metadata.py` | Edit `__metadata__` — ModelSpec fields and arbitrary keys |
 | `metadata_ui.py` | Local web UI for viewing and editing metadata |
 | `embed_workflow.py` | Embed a ComfyUI workflow into an image |
@@ -45,6 +46,8 @@ Everything lives in [`docs/`](docs/):
   run: steps, epochs, batch, effective steps, LR scaling, gradient accumulation
 - **[Monitoring training](docs/monitoring-training.md)** — reading the loss,
   deterministic validation, and building a held-out set
+- **[LoKr training: dim, alpha, and factor](docs/lokr-dim-and-alpha.md)** — what
+  the LoKr knobs do, the `alpha/dim` scale, and setting them for a character
 
 ## Requirements
 
