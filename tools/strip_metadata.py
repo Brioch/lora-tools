@@ -29,12 +29,18 @@ environment):
 import argparse
 import os
 import sys
+from typing import Any
 
 # Formats we can name via an extension; anything else falls back to the input's.
-EXT_FORMAT = {".png": "PNG", ".webp": "WEBP", ".jpg": "JPEG", ".jpeg": "JPEG"}
+EXT_FORMAT: dict[str, str] = {
+    ".png": "PNG",
+    ".webp": "WEBP",
+    ".jpg": "JPEG",
+    ".jpeg": "JPEG",
+}
 
 
-def strip(img):
+def strip(img: Any) -> Any:
     """Return a copy of img holding only its pixels — no info/EXIF/text chunks."""
     from PIL import Image
 
@@ -45,7 +51,7 @@ def strip(img):
     return clean
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -94,7 +100,7 @@ def main():
 
     clean = strip(src)
 
-    save_kwargs = {}
+    save_kwargs: dict[str, Any] = {}
     if out_fmt == "WEBP":
         save_kwargs.update(lossless=True, quality=args.quality)  # avoid re-encode loss
     elif out_fmt == "JPEG":

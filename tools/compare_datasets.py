@@ -37,15 +37,25 @@ import argparse
 import hashlib
 import os
 import sys
+from typing import Any
 
-IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff", ".gif"}
+IMAGE_EXTS: set[str] = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".bmp",
+    ".tif",
+    ".tiff",
+    ".gif",
+}
 
 
-def list_images(folder, recursive=False):
+def list_images(folder: str, recursive: bool = False) -> list[str]:
     """Return sorted image paths in folder (optionally recursing)."""
     if not os.path.isdir(folder):
         sys.exit(f"error: not a directory: {folder}")
-    paths = []
+    paths: list[str] = []
     if recursive:
         for root, _, files in os.walk(folder):
             paths += [
@@ -63,11 +73,11 @@ def list_images(folder, recursive=False):
     return sorted(paths)
 
 
-def dhash(image, size=8):
+def dhash(image: Any, size: int = 8) -> int:
     """Difference hash: compare each pixel to its right neighbour. size*size bits."""
     from PIL import Image
 
-    small = image.convert("L").resize((size + 1, size), Image.LANCZOS)
+    small = image.convert("L").resize((size + 1, size), Image.Resampling.LANCZOS)
     px = small.tobytes()  # one byte per pixel in "L" mode
     bits = 0
     for row in range(size):
@@ -77,7 +87,7 @@ def dhash(image, size=8):
     return bits
 
 
-def ahash(image, size=8):
+def ahash(image: Any, size: int = 8) -> int:
     """Average hash: compare each pixel to the mean. size*size bits."""
     small = image.convert("L").resize((size, size))
     px = small.tobytes()  # one byte per pixel in "L" mode
@@ -88,12 +98,12 @@ def ahash(image, size=8):
     return bits
 
 
-def hamming(a, b):
+def hamming(a: int, b: int) -> int:
     """Number of differing bits between two integer fingerprints."""
     return bin(a ^ b).count("1")
 
 
-def file_sha256(path):
+def file_sha256(path: str) -> str:
     """SHA-256 of the file bytes, to spot byte-identical copies."""
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -102,11 +112,13 @@ def file_sha256(path):
     return h.hexdigest()
 
 
-def load_fingerprints(paths, algo, size):
+def load_fingerprints(
+    paths: list[str], algo: str, size: int
+) -> list[tuple[str, int, str]]:
     """Return [(path, perceptual_hash, sha256)], skipping unreadable images."""
     from PIL import Image
 
-    out = []
+    out: list[tuple[str, int, str]] = []
     for p in paths:
         try:
             with Image.open(p) as img:
@@ -119,7 +131,7 @@ def load_fingerprints(paths, algo, size):
     return out
 
 
-def classify(distance, identical_file, threshold):
+def classify(distance: int, identical_file: bool, threshold: int) -> str:
     if identical_file:
         return "IDENTICAL"
     if distance == 0:
@@ -129,7 +141,7 @@ def classify(distance, identical_file, threshold):
     return "distinct"
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -185,7 +197,7 @@ def main():
         sys.exit("error: no readable images to compare")
 
     bits = args.size * args.size
-    rows = []  # (val_path, train_path, distance, identical_file)
+    rows: list[tuple[str, str, int, bool]] = []  # (val, train, distance, identical)
     for vp, vh, vsha in val_fp:
         tp, th, tsha = min(train_fp, key=lambda t: hamming(vh, t[1]))
         rows.append((vp, tp, hamming(vh, th), vsha == tsha))

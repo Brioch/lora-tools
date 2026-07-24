@@ -42,18 +42,19 @@ import argparse
 import json
 import os
 import sys
+from typing import Any
 
 # EXIF tag IDs ComfyUI uses for WebP metadata.
 TAG_MAKE = 0x010F  # ComfyUI stores extra_pnginfo entries here, e.g. "workflow:..."
 TAG_MODEL = 0x0110  # ComfyUI stores the API prompt here, e.g. "prompt:..."
 
 
-def read_embedded(path):
+def read_embedded(path: str) -> dict[str, str]:
     """Return {key: value_str} of the ComfyUI metadata in an image (WebP or PNG)."""
     from PIL import Image
 
     img = Image.open(path)
-    found = {}
+    found: dict[str, str] = {}
     # PNG (and other) tEXt chunks store the raw JSON under 'workflow'/'prompt'.
     info = getattr(img, "text", None) or img.info
     for key in ("workflow", "prompt"):
@@ -70,7 +71,7 @@ def read_embedded(path):
     return found
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -168,7 +169,7 @@ def main():
         )
     fmt = fmt or "webp"
 
-    img = Image.open(args.image)
+    img: Image.Image = Image.open(args.image)
     img.load()
 
     out = args.output or os.path.splitext(args.image)[0] + ".embed." + fmt
@@ -187,7 +188,7 @@ def main():
         if prompt is not None:
             exif[TAG_MODEL] = "prompt:" + json.dumps(prompt)
         exif_bytes = exif.tobytes()
-        save_kwargs = {"exif": exif_bytes}
+        save_kwargs: dict[str, Any] = {"exif": exif_bytes}
         if fmt == "jpg":
             # EXIF lives in a single APP1 segment capped at ~64KB.
             if len(exif_bytes) > 65533:

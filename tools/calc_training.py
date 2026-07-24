@@ -61,7 +61,7 @@ import math
 import sys
 
 
-def parse_pass(spec):
+def parse_pass(spec: str) -> tuple[int, int, int]:
     """Parse a RES:BATCH[:ACCUM] pass spec into (res, batch, accum) positive ints.
 
     ACCUM is gradient-accumulation steps (default 1); the effective batch a step
@@ -81,7 +81,7 @@ def parse_pass(spec):
     return res, batch, accum
 
 
-def parse_split(spec, n):
+def parse_split(spec: str, n: int) -> list[float]:
     """Parse a `/`-separated weight list into n fractions summing to 1.0."""
     parts = spec.split("/")
     if len(parts) != n:
@@ -96,7 +96,13 @@ def parse_split(spec, n):
     return [w / total for w in weights]
 
 
-def compute(images, total_steps, passes, fractions, drop_last=True):
+def compute(
+    images: int,
+    total_steps: int,
+    passes: list[tuple[int, int, int]],
+    fractions: list[float],
+    drop_last: bool = True,
+) -> list[dict[str, float]]:
     """Return a list of per-pass dicts with the derived schedule.
 
     epochs is derived from the image count (frac * T / images) — how epochs are
@@ -105,7 +111,7 @@ def compute(images, total_steps, passes, fractions, drop_last=True):
     trailing partial batch (the common default), else ceil (pads/keeps it).
     """
     round_batch = math.floor if drop_last else math.ceil
-    rows = []
+    rows: list[dict[str, float]] = []
     for (res, batch, accum), frac in zip(passes, fractions):
         eff_batch = batch * accum  # one optimizer step trains on this many images
         steps_per_epoch = max(1, round_batch(images / eff_batch))
@@ -126,7 +132,13 @@ def compute(images, total_steps, passes, fractions, drop_last=True):
     return rows
 
 
-def format_report(images, total_steps, split_spec, rows, drop_last=True):
+def format_report(
+    images: int,
+    total_steps: int,
+    split_spec: str,
+    rows: list[dict[str, float]],
+    drop_last: bool = True,
+) -> str:
     """Render the schedule as a human-readable table."""
     shares = " / ".join(f"{r['frac'] * 100:.0f}%" for r in rows)
     mode = "drop-last" if drop_last else "keep-last"
@@ -166,14 +178,14 @@ def format_report(images, total_steps, split_spec, rows, drop_last=True):
     return "\n".join(lines)
 
 
-def _ask(label, default=None):
+def _ask(label: str, default: str | int | None = None) -> str:
     """Prompt once, returning the entered string or the default on empty input."""
     suffix = f" [{default}]" if default is not None else ""
     raw = input(f"{label}{suffix}: ").strip()
     return raw if raw else ("" if default is None else str(default))
 
 
-def _ask_int(label, default=None):
+def _ask_int(label: str, default: int | None = None) -> int:
     """Prompt for a positive int, re-asking until valid."""
     while True:
         raw = _ask(label, default)
@@ -191,7 +203,7 @@ def _ask_int(label, default=None):
         return value
 
 
-def _ask_passes(default):
+def _ask_passes(default: str) -> list[tuple[int, int, int]]:
     """Prompt for a space/comma-separated list of RES:BATCH[:ACCUM] specs."""
     while True:
         specs = (
@@ -210,7 +222,7 @@ def _ask_passes(default):
         return passes
 
 
-def _ask_split(default, n):
+def _ask_split(default: str, n: int) -> str:
     """Prompt for a `/`-separated weight list valid for n passes."""
     while True:
         spec = _ask("Budget split (weights per pass)", default)
@@ -222,7 +234,7 @@ def _ask_split(default, n):
         return spec
 
 
-def _ask_bool(label, default=True):
+def _ask_bool(label: str, default: bool = True) -> bool:
     """Prompt for yes/no, returning a bool."""
     hint = "Y/n" if default else "y/N"
     while True:
@@ -236,7 +248,9 @@ def _ask_bool(label, default=True):
         print("  please answer y or n")
 
 
-def run_interactive(default_passes="512:2 1024:1", default_split=None):
+def run_interactive(
+    default_passes: str = "512:2 1024:1", default_split: str | None = None
+) -> None:
     """Prompt for inputs, then print the schedule."""
     print("Training-settings calculator — interactive mode.")
     print("Press Enter to accept the [default] shown; Ctrl-C to quit.\n")
@@ -254,7 +268,7 @@ def run_interactive(default_passes="512:2 1024:1", default_split=None):
     print(format_report(images, total_steps, split_spec, rows, drop_last))
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )

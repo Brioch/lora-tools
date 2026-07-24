@@ -42,12 +42,13 @@ import re
 import shutil
 import struct
 import sys
+from typing import Any
 
 MODELSPEC = "modelspec."
 
 # Named flags -> full metadata key. Grouped by ModelSpec section; each entry is
 # (flag_suffix, metadata_key, help). flag_suffix uses hyphens for the CLI.
-FIELDS = [
+FIELDS: list[tuple[str, str, str]] = [
     # --- core (all models) ---
     ("sai-model-spec", MODELSPEC + "sai_model_spec", "spec version string, e.g. 1.0.0"),
     ("architecture", MODELSPEC + "architecture", "architecture id, e.g. krea2/lora"),
@@ -91,7 +92,7 @@ FIELDS = [
 FLAG_TO_KEY = {suffix.replace("-", "_"): key for suffix, key, _ in FIELDS}
 
 
-def read_header(path):
+def read_header(path: str) -> tuple[int, dict[str, Any]]:
     """Return (header_len, header_dict). Leaves nothing open."""
     with open(path, "rb") as f:
         n = struct.unpack("<Q", f.read(8))[0]
@@ -99,7 +100,7 @@ def read_header(path):
     return n, header
 
 
-def validate(key, value):
+def validate(key: str, value: str) -> str | None:
     """Return a warning string for a non-ModelSpec-conformant value, else None."""
     if key == MODELSPEC + "prediction_type" and value not in ("v", "epsilon"):
         return f"prediction_type should be 'v' or 'epsilon', got {value!r}"
@@ -112,7 +113,7 @@ def validate(key, value):
     return None
 
 
-def parse_set(item):
+def parse_set(item: str) -> tuple[str, str]:
     """Parse a --set KEY=VALUE item into (key, value)."""
     if "=" not in item:
         raise argparse.ArgumentTypeError(f"--set expects KEY=VALUE, got {item!r}")
@@ -123,7 +124,7 @@ def parse_set(item):
     return key, value
 
 
-def rewrite(in_path, out_path, new_meta):
+def rewrite(in_path: str, out_path: str, new_meta: dict[str, str]) -> None:
     """Write out_path = new header (with new_meta) + original tensor buffer."""
     with open(in_path, "rb") as f:
         n = struct.unpack("<Q", f.read(8))[0]
@@ -143,7 +144,7 @@ def rewrite(in_path, out_path, new_meta):
             shutil.copyfileobj(f, g)  # verbatim copy of the tensor bytes
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -203,7 +204,7 @@ def main():
     old_meta = header.get("__metadata__", {}) or {}
 
     # Collect the requested changes (named flags first, then generic --set).
-    sets = {}
+    sets: dict[str, str] = {}
     for dest, key in FLAG_TO_KEY.items():
         val = getattr(args, dest)
         if val is not None:

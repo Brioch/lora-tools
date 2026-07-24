@@ -19,9 +19,11 @@ import re
 import struct
 import sys
 from collections import Counter
+from collections.abc import Iterable
+from typing import Any
 
 # Suffixes that identify the LoRA/LyCORIS math format of a module.
-FORMAT_SUFFIXES = [
+FORMAT_SUFFIXES: list[str] = [
     "lora_down",
     "lora_up",  # kohya / classic LoRA
     "lora_A",
@@ -42,7 +44,7 @@ FORMAT_SUFFIXES = [
 ]
 
 
-def read_header(path):
+def read_header(path: str) -> tuple[dict[str, Any], dict[str, Any]]:
     with open(path, "rb") as f:
         n = struct.unpack("<Q", f.read(8))[0]
         header = json.loads(f.read(n))
@@ -50,14 +52,14 @@ def read_header(path):
     return header, meta
 
 
-def detect_convention(keys):
+def detect_convention(keys: Iterable[str]) -> tuple[set[str], str]:
     """Classify keys by their prefix/naming convention.
 
     Returns (conventions, primary) where conventions is the set of matched
     labels (a file can mix dialects) and primary is the most common one. See
     strip_lora.py for the comfy/diffusers key layouts this repo already knows.
     """
-    counts = Counter()
+    counts: Counter[str] = Counter()
     for k in keys:
         if k.startswith(("diffusion_model.", "text_encoders.")):
             counts["comfy"] += 1
@@ -75,7 +77,7 @@ def detect_convention(keys):
 
 
 # math suffix -> human label
-MATH_LABELS = [
+MATH_LABELS: list[tuple[set[str], str]] = [
     ({"lora_A", "lora_B"}, "PEFT / diffusers (lora_A/lora_B)"),
     ({"lora_down", "lora_up"}, "kohya LoRA (lora_down/lora_up)"),
     (
@@ -87,23 +89,23 @@ MATH_LABELS = [
 ]
 
 
-def detect_math(fmts):
+def detect_math(fmts: Iterable[str]) -> list[str]:
     """Map the detected format suffixes to math-format label(s)."""
     present = set(fmts)
     labels = [label for suffixes, label in MATH_LABELS if suffixes & present]
     return labels or ["(unknown)"]
 
 
-def _json_or_none(value):
+def _json_or_none(value: Any) -> Any:
     try:
         return json.loads(value)
     except (ValueError, TypeError):
         return None
 
 
-def describe_metadata(meta):
+def describe_metadata(meta: dict[str, Any]) -> dict[str, str]:
     """Pull trainer / base-model hints out of __metadata__ (may be empty)."""
-    hints = {}
+    hints: dict[str, str] = {}
 
     # Trainer: the `software` field is a JSON blob {name, repo, version}.
     software = _json_or_none(meta.get("software"))
@@ -137,7 +139,7 @@ def describe_metadata(meta):
     return hints
 
 
-def render_meta_value(value, truncate):
+def render_meta_value(value: object, truncate: bool) -> str:
     """Render a metadata value; decode JSON-string blobs compactly."""
     decoded = _json_or_none(value) if isinstance(value, str) else None
     if isinstance(decoded, (dict, list)):
@@ -148,7 +150,7 @@ def render_meta_value(value, truncate):
     return text
 
 
-def shape_of(key):
+def shape_of(key: str) -> str:
     """Collapse a key to a structural shape: numeric indices -> N, format suffix dropped."""
     k = key
     for suf in FORMAT_SUFFIXES:
@@ -159,7 +161,7 @@ def shape_of(key):
     return k
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )

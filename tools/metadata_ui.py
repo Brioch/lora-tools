@@ -32,6 +32,7 @@ import subprocess
 import sys
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
 
 # Reuse the CLI's field table, validators and header-rewrite (same directory).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -43,8 +44,8 @@ KNOWN_KEYS = {key for _, key, _ in FIELDS}
 ROOT = os.getcwd()
 
 
-def list_files():
-    out = []
+def list_files() -> list[dict[str, object]]:
+    out: list[dict[str, object]] = []
     for name in sorted(os.listdir(ROOT)):
         path = os.path.join(ROOT, name)
         if name.endswith(".safetensors") and os.path.isfile(path):
@@ -58,7 +59,7 @@ def list_files():
     return out
 
 
-def safe_path(name):
+def safe_path(name: str | None) -> str | None:
     """Resolve a user-supplied path to an existing .safetensors file.
 
     Accepts an absolute path (as returned by the native Browse dialog) or a
@@ -93,7 +94,7 @@ sys.stdout.write(path or "")
 """
 
 
-def pick_file():
+def pick_file() -> str:
     """Open a native file-open dialog; return the chosen path, "" on cancel.
 
     Raises on failure (no tkinter, no display) so the caller can report it.
@@ -106,7 +107,7 @@ def pick_file():
     return proc.stdout.strip()
 
 
-def read_meta(path):
+def read_meta(path: str) -> dict[str, Any]:
     _, header = read_header(path)
     return header.get("__metadata__", {}) or {}
 
@@ -386,7 +387,7 @@ loadList();
 """
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
