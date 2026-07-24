@@ -1,9 +1,10 @@
 [project]
 name = "lora-tools"
 version = "0.1.0"
-description = "Add your description here"
+description = "Command-line tools for inspecting and editing LoRA safetensors metadata and planning training runs"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "pillow>=12.3.0",
     "safetensors>=0.8.0",
 ]

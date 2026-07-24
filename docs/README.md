@@ -1,0 +1,16 @@
+# Docs
+
+Notes and concepts for LoRA/LoKr training with these tools. Practical background
+that doesn't belong in a single tool's `--help`.
+
+- **[Training budget and batching](training-budget-and-batching.md)** — how to size
+  a run (steps, epochs, batch, effective steps), the difference between data
+  exposure and gradient updates, learning-rate scaling, and gradient accumulation.
+  This is the theory behind [`tools/calc_training.py`](../README.md#training-settings-calculator-toolscalc_trainingpy).
+- **[Monitoring training](monitoring-training.md)** — why diffusion/flow training
+  loss looks flat, what it does and doesn't tell you, and how to use a deterministic
+  validation loss with a held-out dataset (incl. OneTrainer setup) to actually spot
+  overfitting.
+
+These are working notes, not gospel — the numeric examples use a 31-image Krea 2
+character LoKr as the running case.
