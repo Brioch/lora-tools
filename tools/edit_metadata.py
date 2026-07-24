@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.13"
+# dependencies = []
+# ///
 """Edit the __metadata__ of a .safetensors LoRA (ModelSpec fields and more).
 
 Only the safetensors JSON header is rewritten; the tensor byte-buffer is

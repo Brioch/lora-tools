@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.13"
+# dependencies = []
+# ///
 """Inspect the keys of a .safetensors LoRA without loading any tensors.
 
 Usage:

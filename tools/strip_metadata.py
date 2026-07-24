@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.13"
+# dependencies = ["pillow>=12.3.0"]
+# ///
 """Strip all embedded metadata from an image — EXIF blocks and PNG/WebP text
 chunks alike — writing a clean copy that carries only pixels.
 

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.13"
+# dependencies = ["pillow>=12.3.0"]
+# ///
 """Embed a ComfyUI workflow JSON into an image so it can be dragged onto the
 ComfyUI canvas to load the graph. Output can be WebP, PNG, or JPEG.
 

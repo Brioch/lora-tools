@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.13"
+# dependencies = []
+# ///
 """A tiny local web UI to view and edit a LoRA's safetensors metadata.
 
 Runs a local-only HTTP server (stdlib, no dependencies) that lists the

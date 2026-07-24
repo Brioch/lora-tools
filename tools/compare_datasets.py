@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.13"
+# dependencies = ["pillow>=12.3.0"]
+# ///
 """Compare two image folders and flag validation images that duplicate — exactly
 or near-exactly — an image in the training set.
 

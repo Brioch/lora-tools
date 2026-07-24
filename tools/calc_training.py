@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.13"
+# dependencies = []
+# ///
 """Calculate LoKr/LoRA training settings for a multi-resolution schedule from a
 dataset image count and a total effective-step budget.
 
