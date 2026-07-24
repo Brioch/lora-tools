@@ -34,6 +34,7 @@ Examples:
 
 Requires no third-party packages (pure stdlib).
 """
+
 import argparse
 import json
 import os
@@ -48,22 +49,42 @@ MODELSPEC = "modelspec."
 # (flag_suffix, metadata_key, help). flag_suffix uses hyphens for the CLI.
 FIELDS = [
     # --- core (all models) ---
-    ("sai-model-spec",  MODELSPEC + "sai_model_spec",  "spec version string, e.g. 1.0.0"),
-    ("architecture",    MODELSPEC + "architecture",    "architecture id, e.g. krea2/lora"),
-    ("implementation",  MODELSPEC + "implementation",  "implementation id, e.g. diffusers / sgm / comfy"),
-    ("title",           MODELSPEC + "title",           "user-friendly model name"),
-    ("description",     MODELSPEC + "description",      "description / capabilities (markdown ok)"),
-    ("author",          MODELSPEC + "author",          "creator name / company / username"),
-    ("date",            MODELSPEC + "date",            "ISO-8601 date, e.g. 2026-07-14"),
-    ("license",         MODELSPEC + "license",         "license name / URL / terms"),
-    ("usage-hint",      MODELSPEC + "usage_hint",      "brief operational guidance / trigger words"),
-    ("tags",            MODELSPEC + "tags",            "comma-separated discovery tags"),
-    ("merged-from",     MODELSPEC + "merged_from",     "comma-separated source model names"),
-    ("hash-sha256",     MODELSPEC + "hash_sha256",     "tensor hash, 0x-prefixed hex"),
+    ("sai-model-spec", MODELSPEC + "sai_model_spec", "spec version string, e.g. 1.0.0"),
+    ("architecture", MODELSPEC + "architecture", "architecture id, e.g. krea2/lora"),
+    (
+        "implementation",
+        MODELSPEC + "implementation",
+        "implementation id, e.g. diffusers / sgm / comfy",
+    ),
+    ("title", MODELSPEC + "title", "user-friendly model name"),
+    (
+        "description",
+        MODELSPEC + "description",
+        "description / capabilities (markdown ok)",
+    ),
+    ("author", MODELSPEC + "author", "creator name / company / username"),
+    ("date", MODELSPEC + "date", "ISO-8601 date, e.g. 2026-07-14"),
+    ("license", MODELSPEC + "license", "license name / URL / terms"),
+    (
+        "usage-hint",
+        MODELSPEC + "usage_hint",
+        "brief operational guidance / trigger words",
+    ),
+    ("tags", MODELSPEC + "tags", "comma-separated discovery tags"),
+    ("merged-from", MODELSPEC + "merged_from", "comma-separated source model names"),
+    ("hash-sha256", MODELSPEC + "hash_sha256", "tensor hash, 0x-prefixed hex"),
     # --- image-generation models ---
-    ("resolution",      MODELSPEC + "resolution",      "base resolution WIDTHxHEIGHT, e.g. 1024x1024"),
+    (
+        "resolution",
+        MODELSPEC + "resolution",
+        "base resolution WIDTHxHEIGHT, e.g. 1024x1024",
+    ),
     ("prediction-type", MODELSPEC + "prediction_type", "v or epsilon"),
-    ("trigger-phrase",  MODELSPEC + "trigger_phrase",  "required phrase for an adapter/LoRA"),
+    (
+        "trigger-phrase",
+        MODELSPEC + "trigger_phrase",
+        "required phrase for an adapter/LoRA",
+    ),
 ]
 
 # dest (argparse turns "-" into "_") -> metadata key
@@ -106,7 +127,7 @@ def rewrite(in_path, out_path, new_meta):
     """Write out_path = new header (with new_meta) + original tensor buffer."""
     with open(in_path, "rb") as f:
         n = struct.unpack("<Q", f.read(8))[0]
-        header = json.loads(f.read(n))          # f now sits at the tensor buffer
+        header = json.loads(f.read(n))  # f now sits at the tensor buffer
         if new_meta:
             header["__metadata__"] = new_meta
         else:
@@ -119,30 +140,54 @@ def rewrite(in_path, out_path, new_meta):
         with open(out_path, "wb") as g:
             g.write(struct.pack("<Q", len(new_header)))
             g.write(new_header)
-            shutil.copyfileobj(f, g)             # verbatim copy of the tensor bytes
+            shutil.copyfileobj(f, g)  # verbatim copy of the tensor bytes
 
 
 def main():
     ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("input", help="path to the input .safetensors LoRA")
-    ap.add_argument("-o", "--output", help="output path "
-                    "(default: <input>.edited.safetensors)")
-    ap.add_argument("--in-place", action="store_true",
-                    help="overwrite the input file (atomic temp+rename)")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="show the diff, write nothing")
-    ap.add_argument("--set", dest="sets", metavar="KEY=VALUE", type=parse_set,
-                    action="append", default=[],
-                    help="set an arbitrary metadata key (repeatable)")
-    ap.add_argument("--del", dest="dels", metavar="KEY",
-                    action="append", default=[],
-                    help="delete a metadata key (repeatable)")
+    ap.add_argument(
+        "-o", "--output", help="output path (default: <input>.edited.safetensors)"
+    )
+    ap.add_argument(
+        "--in-place",
+        action="store_true",
+        help="overwrite the input file (atomic temp+rename)",
+    )
+    ap.add_argument(
+        "--dry-run", action="store_true", help="show the diff, write nothing"
+    )
+    ap.add_argument(
+        "--set",
+        dest="sets",
+        metavar="KEY=VALUE",
+        type=parse_set,
+        action="append",
+        default=[],
+        help="set an arbitrary metadata key (repeatable)",
+    )
+    ap.add_argument(
+        "--del",
+        dest="dels",
+        metavar="KEY",
+        action="append",
+        default=[],
+        help="delete a metadata key (repeatable)",
+    )
 
-    grp = ap.add_argument_group("ModelSpec fields (https://github.com/Stability-AI/ModelSpec)")
+    grp = ap.add_argument_group(
+        "ModelSpec fields (https://github.com/Stability-AI/ModelSpec)"
+    )
     for suffix, key, help_text in FIELDS:
-        grp.add_argument(f"--{suffix}", dest=suffix.replace("-", "_"),
-                         default=None, metavar="VALUE", help=help_text)
+        grp.add_argument(
+            f"--{suffix}",
+            dest=suffix.replace("-", "_"),
+            default=None,
+            metavar="VALUE",
+            help=help_text,
+        )
 
     args = ap.parse_args()
 
@@ -206,7 +251,10 @@ def main():
         rewrite(args.input, tmp, new_meta)
         os.replace(tmp, out)
     else:
-        out = args.output or re.sub(r"\.safetensors$", "", args.input) + ".edited.safetensors"
+        out = (
+            args.output
+            or re.sub(r"\.safetensors$", "", args.input) + ".edited.safetensors"
+        )
         rewrite(args.input, out, new_meta)
     print(f"output  : {out}")
 

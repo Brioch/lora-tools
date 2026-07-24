@@ -25,6 +25,7 @@ Any Pillow-readable image works as input. Requires Pillow (present in a ComfyUI
 environment):
     pip install pillow
 """
+
 import argparse
 import os
 import sys
@@ -36,6 +37,7 @@ EXT_FORMAT = {".png": "PNG", ".webp": "WEBP", ".jpg": "JPEG", ".jpeg": "JPEG"}
 def strip(img):
     """Return a copy of img holding only its pixels — no info/EXIF/text chunks."""
     from PIL import Image
+
     clean = Image.new(img.mode, img.size)
     clean.paste(img)
     if img.mode == "P":
@@ -45,13 +47,23 @@ def strip(img):
 
 def main():
     ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("image", help="input image (any Pillow-readable format)")
-    ap.add_argument("-o", "--output", help="output path (default: <image>.stripped.<ext>)")
-    ap.add_argument("--in-place", action="store_true",
-                    help="overwrite the input (mutually exclusive with -o)")
-    ap.add_argument("--quality", type=int, default=90,
-                    help="quality 0-100 for lossy output like JPEG (default: 90)")
+    ap.add_argument(
+        "-o", "--output", help="output path (default: <image>.stripped.<ext>)"
+    )
+    ap.add_argument(
+        "--in-place",
+        action="store_true",
+        help="overwrite the input (mutually exclusive with -o)",
+    )
+    ap.add_argument(
+        "--quality",
+        type=int,
+        default=90,
+        help="quality 0-100 for lossy output like JPEG (default: 90)",
+    )
     args = ap.parse_args()
 
     if args.output and args.in_place:
@@ -73,8 +85,11 @@ def main():
         out = args.image
         out_fmt = in_fmt
     else:
-        out = args.output or (os.path.splitext(args.image)[0]
-                              + ".stripped" + (os.path.splitext(args.image)[1] or ".png"))
+        out = args.output or (
+            os.path.splitext(args.image)[0]
+            + ".stripped"
+            + (os.path.splitext(args.image)[1] or ".png")
+        )
         out_fmt = EXT_FORMAT.get(os.path.splitext(out)[1].lower()) or in_fmt or "PNG"
 
     clean = strip(src)

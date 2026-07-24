@@ -23,6 +23,7 @@ Usage:
 
 The server binds to 127.0.0.1 only and refuses any path outside --dir.
 """
+
 import argparse
 import json
 import os
@@ -34,7 +35,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # Reuse the CLI's field table, validators and header-rewrite (same directory).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from edit_metadata import FIELDS, validate, rewrite, read_header  # noqa: E402
+from edit_metadata import FIELDS, read_header, rewrite, validate  # noqa: E402
 
 KNOWN_KEYS = {key for _, key, _ in FIELDS}
 
@@ -47,8 +48,13 @@ def list_files():
     for name in sorted(os.listdir(ROOT)):
         path = os.path.join(ROOT, name)
         if name.endswith(".safetensors") and os.path.isfile(path):
-            out.append({"name": name, "path": os.path.realpath(path),
-                        "size": os.path.getsize(path)})
+            out.append(
+                {
+                    "name": name,
+                    "path": os.path.realpath(path),
+                    "size": os.path.getsize(path),
+                }
+            )
     return out
 
 
@@ -92,8 +98,9 @@ def pick_file():
 
     Raises on failure (no tkinter, no display) so the caller can report it.
     """
-    proc = subprocess.run([sys.executable, "-c", DIALOG_SCRIPT, ROOT],
-                           capture_output=True, text=True)
+    proc = subprocess.run(
+        [sys.executable, "-c", DIALOG_SCRIPT, ROOT], capture_output=True, text=True
+    )
     if proc.returncode != 0:
         raise RuntimeError((proc.stderr or "dialog failed").strip().splitlines()[-1])
     return proc.stdout.strip()
@@ -137,8 +144,10 @@ class Handler(BaseHTTPRequestHandler):
             if not path:
                 return self._send(404, {"error": "file not found"})
             meta = read_meta(path)
-            known = [{"key": k, "flag": f, "help": h, "value": meta.get(k, "")}
-                     for f, k, h in FIELDS]
+            known = [
+                {"key": k, "flag": f, "help": h, "value": meta.get(k, "")}
+                for f, k, h in FIELDS
+            ]
             other = {k: v for k, v in meta.items() if k not in KNOWN_KEYS}
             return self._send(200, {"file": name, "known": known, "other": other})
         return self._send(404, {"error": "not found"})
@@ -165,8 +174,15 @@ class Handler(BaseHTTPRequestHandler):
         warnings = [w for w in (validate(k, v) for k, v in new_meta.items()) if w]
 
         if payload.get("dry_run"):
-            return self._send(200, {"ok": True, "dry_run": True,
-                                    "metadata": new_meta, "warnings": warnings})
+            return self._send(
+                200,
+                {
+                    "ok": True,
+                    "dry_run": True,
+                    "metadata": new_meta,
+                    "warnings": warnings,
+                },
+            )
 
         if payload.get("in_place"):
             out = path
@@ -176,11 +192,13 @@ class Handler(BaseHTTPRequestHandler):
         else:
             out = re.sub(r"\.safetensors$", "", path) + ".edited.safetensors"
             rewrite(path, out, new_meta)
-        return self._send(200, {"ok": True, "output": os.path.basename(out),
-                                "warnings": warnings})
+        return self._send(
+            200, {"ok": True, "output": os.path.basename(out), "warnings": warnings}
+        )
 
     def _query(self):
-        from urllib.parse import urlparse, parse_qs
+        from urllib.parse import parse_qs, urlparse
+
         q = parse_qs(urlparse(self.path).query)
         return {k: v[0] for k, v in q.items()}
 
@@ -369,12 +387,19 @@ loadList();
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--dir", default=".", help="directory of .safetensors files (default: cwd)")
-    ap.add_argument("--host", default="127.0.0.1", help="bind host (default: 127.0.0.1)")
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument(
+        "--dir", default=".", help="directory of .safetensors files (default: cwd)"
+    )
+    ap.add_argument(
+        "--host", default="127.0.0.1", help="bind host (default: 127.0.0.1)"
+    )
     ap.add_argument("--port", type=int, default=8760, help="bind port (default: 8760)")
-    ap.add_argument("--no-browser", action="store_true", help="don't auto-open a browser")
+    ap.add_argument(
+        "--no-browser", action="store_true", help="don't auto-open a browser"
+    )
     args = ap.parse_args()
 
     global ROOT

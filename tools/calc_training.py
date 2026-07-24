@@ -55,6 +55,7 @@ scale the learning rate by batch*accum, not batch alone.
 
 Pure stdlib — no dependencies.
 """
+
 import argparse
 import math
 import sys
@@ -110,16 +111,18 @@ def compute(images, total_steps, passes, fractions, drop_last=True):
         steps_per_epoch = max(1, round_batch(images / eff_batch))
         epochs = max(1, round(frac * total_steps / images))
         steps = steps_per_epoch * epochs
-        rows.append({
-            "res": res,
-            "batch": batch,
-            "accum": accum,
-            "frac": frac,
-            "steps_per_epoch": steps_per_epoch,
-            "epochs": epochs,
-            "steps": steps,
-            "effective": steps * eff_batch,
-        })
+        rows.append(
+            {
+                "res": res,
+                "batch": batch,
+                "accum": accum,
+                "frac": frac,
+                "steps_per_epoch": steps_per_epoch,
+                "epochs": epochs,
+                "steps": steps,
+                "effective": steps * eff_batch,
+            }
+        )
     return rows
 
 
@@ -135,14 +138,22 @@ def format_report(images, total_steps, split_spec, rows, drop_last=True):
 
     # Only show the accum column when some pass actually accumulates.
     show_accum = any(r["accum"] > 1 for r in rows)
-    header = ["res", "batch"] + (["accum"] if show_accum else []) \
+    header = (
+        ["res", "batch"]
+        + (["accum"] if show_accum else [])
         + ["steps/epoch", "epochs", "steps", "effective"]
-    keys = ["res", "batch"] + (["accum"] if show_accum else []) \
+    )
+    keys = (
+        ["res", "batch"]
+        + (["accum"] if show_accum else [])
         + ["steps_per_epoch", "epochs", "steps", "effective"]
+    )
     table = [header] + [[str(r[k]) for k in keys] for r in rows]
     widths = [max(len(row[i]) for row in table) for i in range(len(header))]
     for row in table:
-        lines.append("  " + "  ".join(cell.rjust(widths[i]) for i, cell in enumerate(row)))
+        lines.append(
+            "  " + "  ".join(cell.rjust(widths[i]) for i, cell in enumerate(row))
+        )
 
     total_actual = sum(r["steps"] for r in rows)
     total_eff = sum(r["effective"] for r in rows)
@@ -150,7 +161,8 @@ def format_report(images, total_steps, split_spec, rows, drop_last=True):
     lines.append("")
     lines.append(
         f"Total: {total_actual} steps, {total_eff} effective steps "
-        f"(target {total_steps}, {delta:+.1f}%)")
+        f"(target {total_steps}, {delta:+.1f}%)"
+    )
     return "\n".join(lines)
 
 
@@ -182,7 +194,11 @@ def _ask_int(label, default=None):
 def _ask_passes(default):
     """Prompt for a space/comma-separated list of RES:BATCH[:ACCUM] specs."""
     while True:
-        specs = _ask("Passes (RES:BATCH[:ACCUM], space-separated)", default).replace(",", " ").split()
+        specs = (
+            _ask("Passes (RES:BATCH[:ACCUM], space-separated)", default)
+            .replace(",", " ")
+            .split()
+        )
         if not specs:
             print("  at least one pass is required")
             continue
@@ -240,24 +256,45 @@ def run_interactive(default_passes="512:2 1024:1", default_split=None):
 
 def main():
     ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("images", type=int, nargs="?",
-                    help="number of images in the dataset")
-    ap.add_argument("total_steps", type=int, nargs="?",
-                    help="total effective-step budget (batch-1-equivalent, e.g. 1250)")
-    ap.add_argument("-i", "--interactive", action="store_true",
-                    help="prompt for inputs interactively (also the default when run "
-                         "with no arguments)")
-    ap.add_argument("--pass", dest="passes", action="append", metavar="RES:BATCH[:ACCUM]",
-                    help="a training pass as RES:BATCH[:ACCUM], where ACCUM is "
-                         "gradient-accumulation steps (default 1; effective batch = "
-                         "batch*accum). Repeatable; default: --pass 512:2 --pass 1024:1")
-    ap.add_argument("--split", metavar="WEIGHTS",
-                    help="`/`-separated budget weights, one per pass, normalized by "
-                         "their sum (default: 3/1)")
-    ap.add_argument("--keep-last", action="store_true",
-                    help="count the trailing partial batch (ceil steps/epoch), for "
-                         "trainers that pad it; default drops it (floor)")
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument(
+        "images", type=int, nargs="?", help="number of images in the dataset"
+    )
+    ap.add_argument(
+        "total_steps",
+        type=int,
+        nargs="?",
+        help="total effective-step budget (batch-1-equivalent, e.g. 1250)",
+    )
+    ap.add_argument(
+        "-i",
+        "--interactive",
+        action="store_true",
+        help="prompt for inputs interactively (also the default when run "
+        "with no arguments)",
+    )
+    ap.add_argument(
+        "--pass",
+        dest="passes",
+        action="append",
+        metavar="RES:BATCH[:ACCUM]",
+        help="a training pass as RES:BATCH[:ACCUM], where ACCUM is "
+        "gradient-accumulation steps (default 1; effective batch = "
+        "batch*accum). Repeatable; default: --pass 512:2 --pass 1024:1",
+    )
+    ap.add_argument(
+        "--split",
+        metavar="WEIGHTS",
+        help="`/`-separated budget weights, one per pass, normalized by "
+        "their sum (default: 3/1)",
+    )
+    ap.add_argument(
+        "--keep-last",
+        action="store_true",
+        help="count the trailing partial batch (ceil steps/epoch), for "
+        "trainers that pad it; default drops it (floor)",
+    )
     args = ap.parse_args()
 
     if args.interactive or (args.images is None and args.total_steps is None):
@@ -281,8 +318,11 @@ def main():
     except ValueError as e:
         ap.error(str(e))
 
-    split_spec = args.split if args.split else "/".join(["3", "1"] if not args.passes
-                                                        else ["1"] * len(passes))
+    split_spec = (
+        args.split
+        if args.split
+        else "/".join(["3", "1"] if not args.passes else ["1"] * len(passes))
+    )
     try:
         fractions = parse_split(split_spec, len(passes))
     except ValueError as e:

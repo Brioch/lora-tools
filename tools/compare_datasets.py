@@ -32,6 +32,7 @@ Examples:
 Requires Pillow (pip install pillow). Exits non-zero if any clash is found, so it
 doubles as a pre-training gate.
 """
+
 import argparse
 import hashlib
 import os
@@ -47,18 +48,25 @@ def list_images(folder, recursive=False):
     paths = []
     if recursive:
         for root, _, files in os.walk(folder):
-            paths += [os.path.join(root, f) for f in files
-                      if os.path.splitext(f)[1].lower() in IMAGE_EXTS]
+            paths += [
+                os.path.join(root, f)
+                for f in files
+                if os.path.splitext(f)[1].lower() in IMAGE_EXTS
+            ]
     else:
-        paths = [os.path.join(folder, f) for f in os.listdir(folder)
-                 if os.path.splitext(f)[1].lower() in IMAGE_EXTS
-                 and os.path.isfile(os.path.join(folder, f))]
+        paths = [
+            os.path.join(folder, f)
+            for f in os.listdir(folder)
+            if os.path.splitext(f)[1].lower() in IMAGE_EXTS
+            and os.path.isfile(os.path.join(folder, f))
+        ]
     return sorted(paths)
 
 
 def dhash(image, size=8):
     """Difference hash: compare each pixel to its right neighbour. size*size bits."""
     from PIL import Image
+
     small = image.convert("L").resize((size + 1, size), Image.LANCZOS)
     px = small.tobytes()  # one byte per pixel in "L" mode
     bits = 0
@@ -97,6 +105,7 @@ def file_sha256(path):
 def load_fingerprints(paths, algo, size):
     """Return [(path, perceptual_hash, sha256)], skipping unreadable images."""
     from PIL import Image
+
     out = []
     for p in paths:
         try:
@@ -122,20 +131,35 @@ def classify(distance, identical_file, threshold):
 
 def main():
     ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("train_dir", help="folder of training images")
     ap.add_argument("val_dir", help="folder of validation images to check")
-    ap.add_argument("--threshold", type=int, default=10,
-                    help="max Hamming distance to flag as a clash (default 10; "
-                         "lower = stricter, 0 = only identical)")
-    ap.add_argument("--hash", dest="algo", choices=["dhash", "ahash"], default="dhash",
-                    help="perceptual hash algorithm (default dhash)")
-    ap.add_argument("--size", type=int, default=8,
-                    help="hash size; NxN bits (default 8 -> 64-bit)")
-    ap.add_argument("-r", "--recursive", action="store_true",
-                    help="recurse into subdirectories")
-    ap.add_argument("--show-all", action="store_true",
-                    help="print the closest training match for every validation image")
+    ap.add_argument(
+        "--threshold",
+        type=int,
+        default=10,
+        help="max Hamming distance to flag as a clash (default 10; "
+        "lower = stricter, 0 = only identical)",
+    )
+    ap.add_argument(
+        "--hash",
+        dest="algo",
+        choices=["dhash", "ahash"],
+        default="dhash",
+        help="perceptual hash algorithm (default dhash)",
+    )
+    ap.add_argument(
+        "--size", type=int, default=8, help="hash size; NxN bits (default 8 -> 64-bit)"
+    )
+    ap.add_argument(
+        "-r", "--recursive", action="store_true", help="recurse into subdirectories"
+    )
+    ap.add_argument(
+        "--show-all",
+        action="store_true",
+        help="print the closest training match for every validation image",
+    )
     args = ap.parse_args()
 
     try:
@@ -167,24 +191,32 @@ def main():
         rows.append((vp, tp, hamming(vh, th), vsha == tsha))
     rows.sort(key=lambda r: r[2])
 
-    print(f"Comparing {len(train_fp)} training vs {len(val_fp)} validation images "
-          f"({args.algo}, {bits}-bit, threshold {args.threshold})\n")
+    print(
+        f"Comparing {len(train_fp)} training vs {len(val_fp)} validation images "
+        f"({args.algo}, {bits}-bit, threshold {args.threshold})\n"
+    )
 
     shown = rows if args.show_all else [r for r in rows if r[2] <= args.threshold]
     for vp, tp, d, idf in shown:
         vrel = os.path.relpath(vp, args.val_dir)
         trel = os.path.relpath(tp, args.train_dir)
-        print(f"  [{classify(d, idf, args.threshold):15}] {vrel}  <->  {trel}  (distance {d})")
+        print(
+            f"  [{classify(d, idf, args.threshold):15}] {vrel}  <->  {trel}  (distance {d})"
+        )
 
     clashes = [r for r in rows if r[2] <= args.threshold]
     print()
     if clashes:
-        print(f"{len(clashes)} of {len(val_fp)} validation images clash with training "
-              f"data (distance <= {args.threshold}). Remove them from the validation set.")
+        print(
+            f"{len(clashes)} of {len(val_fp)} validation images clash with training "
+            f"data (distance <= {args.threshold}). Remove them from the validation set."
+        )
         sys.exit(1)
-    print(f"No clashes: all {len(val_fp)} validation images are distinct from the "
-          f"{len(train_fp)} training images (closest distance {rows[0][2]}, "
-          f"threshold {args.threshold}).")
+    print(
+        f"No clashes: all {len(val_fp)} validation images are distinct from the "
+        f"{len(train_fp)} training images (closest distance {rows[0][2]}, "
+        f"threshold {args.threshold})."
+    )
 
 
 if __name__ == "__main__":
