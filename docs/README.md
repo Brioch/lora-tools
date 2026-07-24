@@ -1,12 +1,13 @@
 # Docs
 
-Notes and concepts for LoRA/LoKr training with these tools. Practical background
-that doesn't belong in a single tool's `--help`.
+Reference and concepts for LoRA/LoKr training with these tools.
 
+- **[Tools reference](tools.md)** — usage, examples, and flags for every script in
+  [`tools/`](../tools/).
 - **[Training budget and batching](training-budget-and-batching.md)** — how to size
   a run (steps, epochs, batch, effective steps), the difference between data
   exposure and gradient updates, learning-rate scaling, and gradient accumulation.
-  This is the theory behind [`tools/calc_training.py`](../README.md#training-settings-calculator-toolscalc_trainingpy).
+  This is the theory behind [`tools/calc_training.py`](tools.md#training-settings-calculator-toolscalc_trainingpy).
 - **[Monitoring training](monitoring-training.md)** — why diffusion/flow training
   loss looks flat, what it does and doesn't tell you, and how to use a deterministic
   validation loss with a held-out dataset (incl. OneTrainer setup) to actually spot

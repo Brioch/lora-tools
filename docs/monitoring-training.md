@@ -88,7 +88,7 @@ validation: "redundant for training" (added no new signal) is not the same as
 near-clones of a training frame.
 
 > To catch near-clones you missed by eye, run
-> [`tools/compare_datasets.py`](../README.md#checking-a-validation-set-for-duplicates-toolscompare_datasetspy)
+> [`tools/compare_datasets.py`](tools.md#checking-a-validation-set-for-duplicates-toolscompare_datasetspy)
 > on your two folders — it perceptual-hashes both sets and flags validation images
 > too close to any training image.
 

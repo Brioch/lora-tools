@@ -1,7 +1,7 @@
 # Training budget and batching
 
 How to size a training run, and what batch size actually changes. This is the
-reasoning behind [`tools/calc_training.py`](../README.md#training-settings-calculator-toolscalc_trainingpy).
+reasoning behind [`tools/calc_training.py`](tools.md#training-settings-calculator-toolscalc_trainingpy).
 
 Running example throughout: a **31-image Krea 2 character LoKr**, trained as a 512
 bulk pass (batch 2) plus a 1024 refinement pass (batch 1).
@@ -116,4 +116,4 @@ res   batch  steps/epoch  epochs  steps  effective
 
 Epochs come from `round(fraction × total / images)` — derived from the image count,
 so independent of batching mode. Reproduce and tweak this with
-[`tools/calc_training.py`](../README.md#training-settings-calculator-toolscalc_trainingpy).
+[`tools/calc_training.py`](tools.md#training-settings-calculator-toolscalc_trainingpy).
