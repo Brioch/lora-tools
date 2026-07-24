@@ -1,5 +1,9 @@
 # LoRA tools
 
+[![CI](https://github.com/Brioch/lora-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/Brioch/lora-tools/actions/workflows/ci.yml)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENCE)
+
 A small collection of command-line tools for a Krea 2 / ComfyUI LoKr workflow:
 inspect and edit LoRA `.safetensors` metadata, embed or strip ComfyUI workflow
 metadata in images, and plan multi-resolution training runs. Most of it is

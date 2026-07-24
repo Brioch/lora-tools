@@ -1,7 +1,13 @@
-"""Tests for the pure classification helpers in tools/inspect_lora.py."""
+"""Tests for tools/inspect_lora.py — pure helpers and the CLI."""
 
+import json
+import sys
+
+import inspect_lora
+import pytest
 from inspect_lora import (
     _json_or_none,
+    describe_metadata,
     detect_convention,
     detect_math,
     render_meta_value,
@@ -28,14 +34,10 @@ class TestDetectConvention:
         assert primary == "original"
 
     def test_mixed_reports_all_and_picks_majority(self):
-        keys = [
-            "diffusion_model.a",
-            "diffusion_model.b",
-            "transformer.c",
-        ]
+        keys = ["diffusion_model.a", "diffusion_model.b", "transformer.c"]
         conventions, primary = detect_convention(keys)
         assert conventions == {"comfy", "diffusers"}
-        assert primary == "comfy"  # two comfy vs one diffusers
+        assert primary == "comfy"
 
 
 class TestDetectMath:
@@ -90,3 +92,70 @@ class TestRenderMetaValue:
 
     def test_no_truncate(self):
         assert render_meta_value("a" * 200, truncate=False) == "a" * 200
+
+
+class TestDescribeMetadata:
+    def test_empty(self):
+        assert describe_metadata({}) == {}
+
+    def test_pulls_all_hints(self):
+        meta = {
+            "software": json.dumps({"name": "OneTrainer", "version": "1.2"}),
+            "ss_network_module": "networks.lora",
+            "ss_network_dim": "16",
+            "ss_network_alpha": "8",
+            "modelspec.implementation": "comfy",
+            "modelspec.architecture": "krea2/lora",
+        }
+        hints = describe_metadata(meta)
+        assert hints["trainer"] == "OneTrainer 1.2"
+        assert "ss_network_module" in hints["ss"]
+        assert hints["implementation"] == "comfy"
+        assert "krea2/lora" in hints["base model"] and "dim 16" in hints["base model"]
+
+
+TENSOR = {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]}
+
+
+class TestMainCLI:
+    def _crafted(self, make_safetensors, tmp_path):
+        meta = {
+            "software": json.dumps({"name": "OneTrainer", "version": "1.2"}),
+            "ss_network_module": "networks.lora",
+            "modelspec.architecture": "krea2/lora",
+        }
+        extra = {
+            "diffusion_model.blocks.0.lora_A.weight": TENSOR,
+            "diffusion_model.blocks.1.lora_B.weight": TENSOR,
+            "diffusion_model.layerwise_blocks.0.lora_A.weight": TENSOR,
+            "diffusion_model.refiner_blocks.0.lora_A.weight": TENSOR,
+        }
+        return make_safetensors(
+            tmp_path / "lora.safetensors", metadata=meta, header_extra=extra
+        )
+
+    def test_full_report(self, make_safetensors, tmp_path, monkeypatch, capsys):
+        path = self._crafted(make_safetensors, tmp_path)
+        monkeypatch.setattr(sys, "argv", ["inspect_lora.py", path])
+        inspect_lora.main()
+        out = capsys.readouterr().out
+        assert "convention" in out and "comfy" in out
+        assert "PEFT" in out
+        assert "OneTrainer" in out
+        assert "structural key shapes" in out
+        assert "main blocks.N" in out
+
+    def test_grep_and_raw(self, make_safetensors, tmp_path, monkeypatch, capsys):
+        path = self._crafted(make_safetensors, tmp_path)
+        monkeypatch.setattr(
+            sys, "argv", ["inspect_lora.py", path, "--grep", "refiner", "--raw"]
+        )
+        inspect_lora.main()
+        assert "refiner_blocks" in capsys.readouterr().out
+
+    def test_missing_file_exits(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            sys, "argv", ["inspect_lora.py", str(tmp_path / "nope.safetensors")]
+        )
+        with pytest.raises(SystemExit):
+            inspect_lora.main()

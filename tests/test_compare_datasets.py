@@ -1,7 +1,23 @@
-"""Tests for the pure helpers in tools/compare_datasets.py (no Pillow needed)."""
+"""Tests for tools/compare_datasets.py — pure helpers and the CLI clash gate."""
 
+import random
+import shutil
+import sys
+
+import compare_datasets
 import pytest
 from compare_datasets import classify, hamming
+
+
+def noise_image(path, seed):
+    """Deterministic random-noise image, so distinct seeds get far-apart hashes."""
+    from PIL import Image
+
+    rng = random.Random(seed)
+    img = Image.new("L", (32, 32))
+    img.putdata([rng.randrange(256) for _ in range(32 * 32)])
+    img.convert("RGB").save(path)
+    return str(path)
 
 
 class TestHamming:
@@ -9,7 +25,6 @@ class TestHamming:
         assert hamming(0b1010, 0b1010) == 0
 
     def test_counts_differing_bits(self):
-        # 0b1010 ^ 0b0011 == 0b1001 -> 2 bits differ.
         assert hamming(0b1010, 0b0011) == 2
 
     def test_all_bits_differ(self):
@@ -18,7 +33,6 @@ class TestHamming:
 
 class TestClassify:
     def test_identical_file_wins(self):
-        # A byte-identical file is labelled IDENTICAL even at distance 0.
         assert classify(0, identical_file=True, threshold=10) == "IDENTICAL"
 
     def test_distance_zero_is_identical_image(self):
@@ -39,3 +53,112 @@ class TestClassify:
     )
     def test_spectrum(self, distance, expected):
         assert classify(distance, identical_file=False, threshold=10) == expected
+
+
+@pytest.fixture
+def datasets(tmp_path):
+    """A train/ and val/ dir; val holds a byte-identical copy plus a distinct image."""
+    train = tmp_path / "train"
+    val = tmp_path / "val"
+    train.mkdir()
+    val.mkdir()
+    a = noise_image(train / "a.png", seed=1)
+    noise_image(train / "b.png", seed=2)
+    shutil.copyfile(a, val / "dup.png")  # byte-identical -> clash
+    noise_image(val / "unique.png", seed=999)  # far from all train -> distinct
+    return train, val
+
+
+class TestMainCLI:
+    def test_clash_exits_nonzero(self, datasets, monkeypatch, capsys):
+        train, val = datasets
+        monkeypatch.setattr(sys, "argv", ["compare_datasets.py", str(train), str(val)])
+        with pytest.raises(SystemExit) as e:
+            compare_datasets.main()
+        assert e.value.code == 1
+        assert "clash" in capsys.readouterr().out
+
+    def test_show_all_and_ahash(self, datasets, monkeypatch, capsys):
+        train, val = datasets
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "compare_datasets.py",
+                str(train),
+                str(val),
+                "--show-all",
+                "--hash",
+                "ahash",
+            ],
+        )
+        with pytest.raises(SystemExit):
+            compare_datasets.main()
+        assert "IDENTICAL" in capsys.readouterr().out
+
+    def test_no_clash_returns_cleanly(self, tmp_path, monkeypatch, capsys):
+        train = tmp_path / "t"
+        val = tmp_path / "v"
+        train.mkdir()
+        val.mkdir()
+        noise_image(train / "a.png", seed=1)
+        noise_image(val / "b.png", seed=999)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["compare_datasets.py", str(train), str(val), "--threshold", "0"],
+        )
+        compare_datasets.main()  # no clash -> no SystemExit
+        assert "No clashes" in capsys.readouterr().out
+
+    def test_recursive(self, tmp_path, monkeypatch):
+        train = tmp_path / "t"
+        val = tmp_path / "v"
+        (train / "sub").mkdir(parents=True)
+        val.mkdir()
+        a = noise_image(train / "sub" / "a.png", seed=1)
+        shutil.copyfile(a, val / "dup.png")
+        monkeypatch.setattr(
+            sys, "argv", ["compare_datasets.py", str(train), str(val), "-r"]
+        )
+        with pytest.raises(SystemExit):
+            compare_datasets.main()
+
+    def test_skips_unreadable_image(self, tmp_path, monkeypatch, capsys):
+        train = tmp_path / "t"
+        val = tmp_path / "v"
+        train.mkdir()
+        val.mkdir()
+        a = noise_image(train / "a.png", seed=1)
+        shutil.copyfile(a, val / "dup.png")
+        (val / "corrupt.png").write_bytes(b"not an image")
+        monkeypatch.setattr(sys, "argv", ["compare_datasets.py", str(train), str(val)])
+        with pytest.raises(SystemExit):
+            compare_datasets.main()
+        assert "skipping" in capsys.readouterr().err
+
+    @pytest.mark.parametrize(
+        "extra",
+        [[], ["--threshold", "-1"], ["--size", "1"]],
+    )
+    def test_bad_dirs_and_args_exit(self, tmp_path, monkeypatch, extra):
+        # train_dir is a file, not a dir -> error (also covers arg validation).
+        f = tmp_path / "notdir.png"
+        noise_image(f, seed=1)
+        val = tmp_path / "v"
+        val.mkdir()
+        monkeypatch.setattr(
+            sys, "argv", ["compare_datasets.py", str(f), str(val), *extra]
+        )
+        with pytest.raises(SystemExit):
+            compare_datasets.main()
+
+    def test_empty_dir_exits(self, tmp_path, monkeypatch):
+        train = tmp_path / "t"
+        val = tmp_path / "v"
+        train.mkdir()
+        val.mkdir()
+        noise_image(train / "a.png", seed=1)  # train non-empty, val empty
+        monkeypatch.setattr(sys, "argv", ["compare_datasets.py", str(train), str(val)])
+        with pytest.raises(SystemExit):
+            compare_datasets.main()

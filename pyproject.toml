@@ -23,6 +23,7 @@ Repository = "https://github.com/Brioch/lora-tools"
 [dependency-groups]
 dev = [
     "pytest>=8",
+    "pytest-cov>=6",
     "mypy>=1.13",
 ]
 
@@ -45,6 +46,18 @@ testpaths = ["tests"]
 pythonpath = ["tools"]
 
 [tool.mypy]
-files = ["tools", "tests"]
+files = ["tools"]
 python_version = "3.13"
+strict = true
 ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["tools"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 90
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

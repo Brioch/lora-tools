@@ -113,10 +113,10 @@ def read_meta(path: str) -> dict[str, Any]:
 
 
 class Handler(BaseHTTPRequestHandler):
-    def log_message(self, *a):  # keep the console quiet
+    def log_message(self, format: str, *args: object) -> None:  # keep the console quiet
         pass
 
-    def _send(self, code, body, ctype="application/json"):
+    def _send(self, code: int, body: object, ctype: str = "application/json") -> None:
         data = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", ctype)
@@ -124,21 +124,21 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def do_GET(self):
+    def do_GET(self) -> None:
         if self.path == "/" or self.path.startswith("/?"):
             return self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
         if self.path == "/api/list":
             return self._send(200, {"dir": ROOT, "files": list_files()})
         if self.path == "/api/browse":
             try:
-                path = pick_file()
+                chosen = pick_file()
             except Exception as e:
                 return self._send(200, {"error": f"file dialog unavailable: {e}"})
-            if not path:
+            if not chosen:
                 return self._send(200, {"path": None})
-            if not path.endswith(".safetensors"):
+            if not chosen.endswith(".safetensors"):
                 return self._send(200, {"error": "not a .safetensors file"})
-            return self._send(200, {"path": os.path.realpath(path)})
+            return self._send(200, {"path": os.path.realpath(chosen)})
         if self.path.startswith("/api/meta"):
             name = self._query().get("file")
             path = safe_path(name)
@@ -153,7 +153,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"file": name, "known": known, "other": other})
         return self._send(404, {"error": "not found"})
 
-    def do_POST(self):
+    def do_POST(self) -> None:
         if self.path != "/api/save":
             return self._send(404, {"error": "not found"})
         try:
@@ -197,7 +197,7 @@ class Handler(BaseHTTPRequestHandler):
             200, {"ok": True, "output": os.path.basename(out), "warnings": warnings}
         )
 
-    def _query(self):
+    def _query(self) -> dict[str, str]:
         from urllib.parse import parse_qs, urlparse
 
         q = parse_qs(urlparse(self.path).query)

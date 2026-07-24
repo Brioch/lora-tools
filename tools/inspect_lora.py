@@ -218,7 +218,7 @@ def main() -> None:
         print(f"  base model : {hints['base model']}")
 
     # Block indices for the common Krea2 groups.
-    def indices(pattern):
+    def indices(pattern: str) -> list[int]:
         return sorted(
             {int(m.group(1)) for k in keys for m in [re.search(pattern, k)] if m}
         )
@@ -227,7 +227,7 @@ def main() -> None:
     lw = indices(r"layerwise_blocks\.(\d+)\.")
     rf = indices(r"refiner_blocks\.(\d+)\.")
 
-    def fmt_idx(lst):
+    def fmt_idx(lst: list[int]) -> str:
         return f"{lst[0]}..{lst[-1]} (count {len(lst)})" if lst else "none"
 
     print(f"main blocks.N   : {fmt_idx(main_blocks)}")
