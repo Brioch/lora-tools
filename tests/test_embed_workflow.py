@@ -68,6 +68,17 @@ class TestRoundTrip:
         embed_workflow.main()
         assert "no ComfyUI" in capsys.readouterr().out
 
+    def test_webp_lossy_uses_quality(self, make_image, tmp_path, monkeypatch):
+        img = make_image(tmp_path / "shot.png")
+        wf = write_json(tmp_path / "wf.json", WORKFLOW)
+        out = tmp_path / "out.webp"
+        # --lossy takes the non-lossless save path (quality, not effort).
+        monkeypatch.setattr(
+            sys, "argv", ["embed_workflow.py", img, wf, "-o", str(out), "--lossy"]
+        )
+        embed_workflow.main()
+        assert json.loads(read_embedded(str(out))["workflow"]) == WORKFLOW
+
 
 class TestErrors:
     def test_missing_image(self, tmp_path, monkeypatch):
@@ -98,3 +109,24 @@ class TestErrors:
         monkeypatch.setattr(sys, "argv", ["embed_workflow.py", img, wf, "-o", str(out)])
         embed_workflow.main()
         assert "nodes" in capsys.readouterr().err
+
+    def test_missing_prompt_file(self, make_image, tmp_path, monkeypatch):
+        img = make_image(tmp_path / "shot.png")
+        wf = write_json(tmp_path / "wf.json", WORKFLOW)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["embed_workflow.py", img, wf, "--prompt", str(tmp_path / "nope.json")],
+        )
+        with pytest.raises(SystemExit):
+            embed_workflow.main()
+
+    def test_jpeg_workflow_too_large_exits(self, make_image, tmp_path, monkeypatch):
+        img = make_image(tmp_path / "shot.png")
+        # A payload past JPEG's ~64KB EXIF APP1 limit must be rejected, not saved.
+        wf = write_json(tmp_path / "wf.json", {"nodes": [], "blob": "x" * 70000})
+        out = tmp_path / "out.jpg"
+        monkeypatch.setattr(sys, "argv", ["embed_workflow.py", img, wf, "-o", str(out)])
+        with pytest.raises(SystemExit) as e:
+            embed_workflow.main()
+        assert "too large" in str(e.value.code)

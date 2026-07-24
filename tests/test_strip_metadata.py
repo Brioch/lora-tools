@@ -68,6 +68,16 @@ class TestMainCLI:
         strip_metadata.main()
         assert out.exists() and not has_text(str(out))
 
+    def test_jpeg_output_uses_quality(self, tmp_path, monkeypatch):
+        img = png_with_text(tmp_path / "shot.png")
+        out = tmp_path / "clean.jpg"
+        # JPEG output takes the quality save path (RGB input, no metadata carried).
+        monkeypatch.setattr(
+            sys, "argv", ["strip_metadata.py", img, "-o", str(out), "--quality", "70"]
+        )
+        strip_metadata.main()
+        assert out.exists() and not has_text(str(out))
+
     def test_missing_file_exits(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
             sys, "argv", ["strip_metadata.py", str(tmp_path / "nope.png")]

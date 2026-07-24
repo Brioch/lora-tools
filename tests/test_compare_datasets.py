@@ -162,3 +162,27 @@ class TestMainCLI:
         monkeypatch.setattr(sys, "argv", ["compare_datasets.py", str(train), str(val)])
         with pytest.raises(SystemExit):
             compare_datasets.main()
+
+    def test_empty_train_dir_exits(self, tmp_path, monkeypatch):
+        train = tmp_path / "t"
+        val = tmp_path / "v"
+        train.mkdir()
+        val.mkdir()
+        noise_image(val / "a.png", seed=1)  # train empty, val non-empty
+        monkeypatch.setattr(sys, "argv", ["compare_datasets.py", str(train), str(val)])
+        with pytest.raises(SystemExit) as e:
+            compare_datasets.main()
+        assert "no images found" in str(e.value.code)
+
+    def test_all_unreadable_exits(self, tmp_path, monkeypatch):
+        train = tmp_path / "t"
+        val = tmp_path / "v"
+        train.mkdir()
+        val.mkdir()
+        # Files match an image extension but none decode -> nothing to compare.
+        (train / "corrupt.png").write_bytes(b"not an image")
+        noise_image(val / "a.png", seed=1)
+        monkeypatch.setattr(sys, "argv", ["compare_datasets.py", str(train), str(val)])
+        with pytest.raises(SystemExit) as e:
+            compare_datasets.main()
+        assert "no readable images" in str(e.value.code)
