@@ -7,15 +7,15 @@
 
 A small collection of command-line tools for a Krea 2 / ComfyUI LoKr workflow:
 inspect and edit LoRA `.safetensors` metadata, embed or strip ComfyUI workflow
-metadata in images, and plan multi-resolution training runs. Most of it is
-format-agnostic and pure stdlib; only the image/dataset tools need Pillow, and
-the weight-health tool needs numpy.
+metadata in images, prepare and lint training datasets, and plan multi-resolution
+training runs. Most of it is format-agnostic and pure stdlib; only the
+image/dataset tools need Pillow, and the weight-health tool needs numpy.
 
 ## Quick start
 
 Everything runs through [uv](https://docs.astral.sh/uv/) — no manual setup. Each
-script is self-contained (PEP 723 inline dependencies), so `uv run` fetches what
-it needs on first use:
+script declares its own dependencies inline (PEP 723), so `uv run` fetches what it
+needs on first use:
 
 ```bash
 uv run tools/inspect_lora.py path/to/lora.safetensors
@@ -34,6 +34,11 @@ uv run tools/inspect_lora.py path/to/lora.safetensors
 | `strip_metadata.py` | Strip all metadata from an image |
 | `calc_training.py` | Turn an image count + step budget into a training schedule |
 | `compare_datasets.py` | Flag validation images that duplicate training images |
+| `lint_dataset.py` | Validate a dataset's image + caption pairs before training |
+| `prepare_images.py` | Normalize images: orientation, mode, format, longest edge |
+| `dedupe_images.py` | Remove exact and near-duplicate images (and their captions) |
+| `edit_captions.py` | Batch-edit caption tag lists (replace, remove, add, dedupe, sort) |
+| `balance_regularization.py` | Match a regularization set's image count to the training set |
 
 Full usage, examples, and flags for each: **[docs/tools.md](docs/tools.md)**.
 

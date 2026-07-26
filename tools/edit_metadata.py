@@ -19,8 +19,8 @@ for you (--title -> modelspec.title). Use --set / --del for arbitrary keys
 Examples:
     # Set a few ModelSpec fields, write lora.edited.safetensors next to it.
     python edit_metadata.py lora.safetensors \
-        --title "SteepSlope v2" --author yourname \
-        --usage-hint "trigger: sslope" --tags "character,style"
+        --title "My Character v2" --author yourname \
+        --usage-hint "trigger: mychar" --tags "character,style"
 
     # Preview the change without writing anything.
     python edit_metadata.py lora.safetensors --title "X" --dry-run

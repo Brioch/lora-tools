@@ -32,9 +32,11 @@ uvx pre-commit run --all-files          # ruff lint + format + mypy + hygiene
 - **Tests:** add tests under `tests/` for any behaviour change; keep coverage at
   or above the gate. Pure logic is tested directly; CLIs are driven in-process by
   patching `sys.argv`.
-- **Scripts are standalone:** each `tools/*.py` declares its own dependencies via
-  a [PEP 723](https://peps.python.org/pep-0723/) header and must remain runnable
-  with `uv run tools/<script>.py`.
+- **Scripts run directly:** each `tools/*.py` declares its own dependencies via a
+  [PEP 723](https://peps.python.org/pep-0723/) header and must remain runnable with
+  `uv run tools/<script>.py`. Most are self-contained; the dataset tools import the
+  shared `tools/dsutils.py`, so anything a script pulls in through it still has to
+  be declared in that script's own header.
 - **Docs:** user-facing changes go in [`docs/`](docs/) (usage in
   [`docs/tools.md`](docs/tools.md)); keep the README a summary.
 

@@ -1,9 +1,9 @@
 # Tools reference
 
-Usage and flags for every script in [`tools/`](../tools/). Each is standalone and
-run with `uv run tools/<script>.py` — the PEP 723 header declares its
-dependencies, so `uv` fetches what it needs on first use (only the image/dataset
-tools pull in Pillow). Every script also has a `--help`.
+Usage and flags for every script in [`tools/`](../tools/). Each one runs directly
+with `uv run tools/<script>.py` — the PEP 723 header declares its dependencies, so
+`uv` fetches what it needs on first use (only the image/dataset tools pull in
+Pillow). Every script also has a `--help`.
 
 - [Inspect LoRA metadata](#inspect-lora-metadata) — `inspect_lora.py`
 - [LoRA weight health](#lora-weight-health-toolslora_healthpy) — `lora_health.py`
@@ -14,6 +14,15 @@ tools pull in Pillow). Every script also has a `--help`.
 - [Stripping image metadata](#stripping-image-metadata-toolsstrip_metadatapy) — `strip_metadata.py`
 - [Training settings calculator](#training-settings-calculator-toolscalc_trainingpy) — `calc_training.py`
 - [Checking a validation set for duplicates](#checking-a-validation-set-for-duplicates-toolscompare_datasetspy) — `compare_datasets.py`
+- [Linting a dataset](#linting-a-dataset-toolslint_datasetpy) — `lint_dataset.py`
+- [Normalizing dataset images](#normalizing-dataset-images-toolsprepare_imagespy) — `prepare_images.py`
+- [Removing duplicate images](#removing-duplicate-images-toolsdedupe_imagespy) — `dedupe_images.py`
+- [Batch-editing captions](#batch-editing-captions-toolsedit_captionspy) — `edit_captions.py`
+- [Balancing a regularization set](#balancing-a-regularization-set-toolsbalance_regularizationpy) — `balance_regularization.py`
+
+The five dataset tools share a small helper module, `tools/dsutils.py` (extension
+normalization, image/caption pairing, dHash). It is imported rather than run, so it
+has no CLI of its own.
 
 ## Inspect LoRA metadata
 
@@ -131,8 +140,8 @@ instant and never loads a tensor. Pure stdlib (no `safetensors` package needed).
 ```bash
 # Set ModelSpec fields; writes <name>.edited.safetensors next to the input.
 uv run tools/edit_metadata.py lora.safetensors \
-    --title "SteepSlope v2" --author yourname \
-    --usage-hint "trigger: sslope" --tags "character,style"
+    --title "My Character v2" --author yourname \
+    --usage-hint "trigger: mychar" --tags "character,style"
 
 # Preview the before -> after diff without writing.
 uv run tools/edit_metadata.py lora.safetensors --title "X" --dry-run
@@ -334,3 +343,193 @@ uv run tools/compare_datasets.py train/ val/ --show-all
 | `--size N` | Hash size; `N×N` bits (default 8 → 64-bit). |
 | `-r`, `--recursive` | Recurse into subdirectories. |
 | `--show-all` | Print the closest training match for every validation image. |
+
+
+## Linting a dataset (`tools/lint_dataset.py`)
+
+Check a directory of image + caption pairs for the problems that most often waste
+GPU time: an image the loader cannot decode, a caption that was never written, a
+stray caption left behind after its image was deleted. Findings are split by how
+much they matter, and the exit code follows that split, so it doubles as a
+pre-training gate:
+
+| Severity | Exit | Checks |
+|----------|------|--------|
+| `ERRORS` | 1 | corrupt/unreadable image, image with no caption, empty caption |
+| `WARNINGS` | 0 | orphan caption (no image), non-RGB mode, image below `--min-size`, extension not matching the real format |
+
+Pair it with [`dedupe_images.py`](#removing-duplicate-images-toolsdedupe_imagespy)
+for duplicate frames and
+[`prepare_images.py`](#normalizing-dataset-images-toolsprepare_imagespy) to fix most
+of what it warns about. Requires Pillow.
+
+```bash
+# Gate a dataset: exits 1 if anything is actually broken.
+uv run tools/lint_dataset.py --dir ./train
+
+# Also warn about small images, and accept images without captions.
+uv run tools/lint_dataset.py --dir ./train --min-size 1024 --no-require-caption
+```
+
+| Flag | Description |
+|------|-------------|
+| `--dir DIR` | Dataset directory (required). |
+| `--image-exts EXT ...` | Image extensions to consider, case-insensitive (default `.png .jpg .jpeg .webp .bmp`). |
+| `--caption-ext EXT` | Caption extension paired with each image (default `.txt`). |
+| `--min-size N` | Warn if an image's shortest edge is below this, in px (default 0 = off). |
+| `--no-require-caption` | Treat a missing caption as a warning instead of an error. |
+
+
+## Normalizing dataset images (`tools/prepare_images.py`)
+
+Trainers choke on, or silently mangle, the odds and ends a scraped dataset carries:
+sideways phone photos (EXIF rotation), transparent PNGs that composite to black,
+palette or grayscale modes, and 6000px originals that cost VRAM without adding
+detail. For every image this can apply EXIF orientation and strip metadata, flatten
+transparency to RGB over white, convert to one target format, and downscale so the
+longest edge fits `--max-edge` (it never upscales).
+
+It never touches the input unless you ask it to: by default the results go to a
+sibling `<dir>.prepared/` directory with paired captions copied along, and `--out-dir`
+picks that destination explicitly. Requires Pillow; exits 1 if any image failed to
+process.
+
+```bash
+# Normalize ./raw into ./raw.prepared/, leaving ./raw untouched.
+uv run tools/prepare_images.py --dir ./raw --format jpg --max-edge 1536
+
+# Same, but choose the destination.
+uv run tools/prepare_images.py --dir ./raw --out-dir ./train --format png
+
+# Rewrite the dataset in place (destructive; preview it with --dry-run first).
+uv run tools/prepare_images.py --dir ./train --max-edge 1536 --in-place
+```
+
+> **`--in-place` is irreversible.** It rewrites each image over itself, and a format
+> change (`--format`) also deletes the old-extension original. There is no backup and
+> no undo — keep a copy of the dataset, or run `--dry-run` first. Every other mode
+> leaves the input directory exactly as it was.
+
+| Flag | Description |
+|------|-------------|
+| `--dir DIR` | Input directory (required). |
+| `--out-dir DIR` | Destination directory (default: a sibling `<dir>.prepared`). Paired captions are copied along. Mutually exclusive with `--in-place`. |
+| `--in-place` | Rewrite the input directory instead. **Destructive** — a format change deletes the old-extension original. |
+| `--format {png,jpg}` | Convert every image to this format (default: keep each as-is). |
+| `--max-edge N` | Downscale so the longest edge is ≤ this, in px (default 0 = off, never upscales). |
+| `--no-flatten` | Keep the original mode instead of forcing RGB. |
+| `--quality N` | JPEG quality (default 95). |
+| `--image-exts EXT ...` | Image extensions to consider, case-insensitive (default `.png .jpg .jpeg .webp .bmp`). |
+| `--caption-ext EXT` | Caption extension paired with each image (default `.txt`). |
+| `--dry-run` | Print what would be written without touching the filesystem. |
+
+
+## Removing duplicate images (`tools/dedupe_images.py`)
+
+Duplicates in a training set silently reweight it: the same frame seen twice pulls
+the model twice as hard toward it, which is how a character LoRA ends up locked to
+one pose. This finds them in two passes — byte-identical files (SHA-256), then
+perceptual near-duplicates (dHash within `--threshold` Hamming distance, which
+catches crops, re-encodes and resizes).
+
+It uses the same 64-bit dHash as
+[`compare_datasets.py`](#checking-a-validation-set-for-duplicates-toolscompare_datasetspy),
+so distances from the two tools are comparable: 0 is identical at hash resolution,
+1–10 near-duplicate, higher genuinely distinct. Within each group one image is kept
+(highest resolution by default) and the rest are deleted with their captions.
+Deletions prompt for confirmation unless `-y` or `--dry-run`. Requires Pillow.
+
+```bash
+# Report and remove near-duplicates (prompts before deleting).
+uv run tools/dedupe_images.py --dir ./train --threshold 5
+
+# Byte-identical files only, and show what would go without touching anything.
+uv run tools/dedupe_images.py --dir ./train --exact-only --dry-run
+```
+
+| Flag | Description |
+|------|-------------|
+| `--dir DIR` | Dataset directory (required). |
+| `--threshold N` | Max dHash Hamming distance for near-duplicates (default 5; 0 = identical only). |
+| `--exact-only` | Only remove byte-identical files, skipping the perceptual pass. |
+| `--keep {largest,first}` | Which image to keep in each group (default `largest`, tie-broken by name). |
+| `--image-exts EXT ...` | Image extensions to consider, case-insensitive (default `.png .jpg .jpeg .webp .bmp`). |
+| `--caption-ext EXT` | Caption extension deleted alongside each image (default `.txt`). |
+| `--dry-run` | Report the groups without deleting anything. |
+| `-y`, `--yes` | Skip the confirmation prompt before deleting. |
+
+
+## Batch-editing captions (`tools/edit_captions.py`)
+
+Edit every caption `.txt` in a dataset at once. Captions are treated as
+comma-separated tag lists (the common diffusion format), so the edits are tag-aware
+rather than plain text substitution: replacing `man` will not mangle `woman`, and
+adding a trigger word twice is a no-op — which makes the tool safe to re-run.
+
+Operations are applied in a fixed order regardless of flag order: `--replace`,
+`--remove`, `--prepend`, `--add`, `--dedupe`, `--sort`. Matching is
+case-insensitive; the original casing of kept tags is preserved. Every run prints a
+before/after diff of the files it touches. Pure stdlib.
+
+```bash
+# Add a trigger word to the front of every caption and drop duplicate tags.
+uv run tools/edit_captions.py --dir ./train --prepend "mytoken" --dedupe
+
+# Clean up unwanted tags and rename one.
+uv run tools/edit_captions.py --dir ./train --remove "blurry" --replace "man" "person"
+```
+
+| Flag | Description |
+|------|-------------|
+| `--dir DIR` | Dataset directory (required). |
+| `--caption-ext EXT` | Caption extension to edit (default `.txt`). |
+| `--replace OLD NEW` | Rename a whole tag `OLD` to `NEW`, case-insensitive. Repeatable. |
+| `--remove TAG` | Remove a tag, case-insensitive. Repeatable. |
+| `--prepend TAG` | Prepend a tag if absent, e.g. a trigger word. Repeatable. |
+| `--add TAG` | Append a tag if absent. Repeatable. |
+| `--dedupe` | Drop duplicate tags, keeping the first occurrence. |
+| `--sort` | Sort tags alphabetically. |
+| `--dry-run` | Show the before/after diff without writing. |
+
+At least one operation is required; with none the tool exits 2 rather than
+rewriting every file to no effect.
+
+
+## Balancing a regularization set (`tools/balance_regularization.py`)
+
+A Dreambooth/LoRA dataset wants the regularization (class) image count to match the
+training image count so neither set overpowers the other: too few class images and
+the class prior collapses into your subject, too many and the subject never lands.
+This makes the regularization directory hold *exactly* as many image+caption pairs
+as the training directory — drawing new ones at random from a separate pool, or
+trimming the excess.
+
+It is idempotent: run it twice with the same `--seed` and the second run has nothing
+to do, so it is safe to re-run after adding training images. Images already present
+in the regularization directory (by stem) are never drawn twice from the pool.
+Deletions prompt for confirmation unless `-y` or `--dry-run`. Pure stdlib.
+
+```bash
+# Bring ./reg to the same image count as ./train, drawing from ./pool.
+uv run tools/balance_regularization.py \
+    --train-dir ./train --pool-dir ./pool --reg-dir ./reg --seed 0
+
+# Preview the plan without touching the filesystem.
+uv run tools/balance_regularization.py \
+    --train-dir ./train --pool-dir ./pool --reg-dir ./reg --dry-run
+```
+
+| Flag | Description |
+|------|-------------|
+| `--train-dir DIR` | Training dir; its image count sets the target n (required). |
+| `--pool-dir DIR` | Source pool of candidate regularization images (required). |
+| `--reg-dir DIR` | Destination regularization dir to balance; created if absent (required). |
+| `--seed N` | Seed for reproducible random selection (default: unseeded). |
+| `--image-exts EXT ...` | Image extensions to consider, case-insensitive (default `.png .jpg .jpeg .webp .bmp`). |
+| `--caption-ext EXT` | Caption extension paired with each image (default `.txt`). |
+| `--move` | Move pool images instead of copying them. |
+| `--dry-run` | Print planned actions without changing the filesystem. |
+| `-y`, `--yes` | Skip the confirmation prompt before deletions. |
+
+> **Note:** a pool smaller than the shortfall is not an error — the tool takes what
+> it can, warns on stderr how many the set is short by, and still exits 0.

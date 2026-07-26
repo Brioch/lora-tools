@@ -49,7 +49,7 @@ class TestHeaderRoundTrip:
         dst = tmp_path / "out.safetensors"
         write_safetensors(src, {"a": "1"})
 
-        rewrite(str(src), str(dst), {"title": "SteepSlope v2"})
+        rewrite(str(src), str(dst), {"title": "My Character v2"})
 
         n, _ = read_header(str(dst))
         assert n % 8 == 0
