@@ -13,10 +13,21 @@ they matter:
 
   ERRORS   (exit 1)   corrupt/unreadable image, image with no caption, empty caption
   WARNINGS (exit 0)   orphan caption (no image), non-RGB mode, image below --min-size,
-                      extension not matching the real image format
+                      extension not matching the real image format, near-blank image,
+                      caption missing the --trigger word
+
+Two checks are worth calling out:
+
+  * --trigger WORD catches the mistake that silently wastes a whole run: training with
+    a trigger word that some captions spell differently, or omit. The word is matched
+    as a whole tag, case-insensitively, using the same tokenizer as edit_captions.py.
+  * near-blank images are caught by grayscale dynamic range (--min-contrast). A frame
+    that is flat — a blown-out white background, a solid fill, a fully transparent PNG
+    flattened to one colour — contributes nothing but still costs a training slot.
 
 Because it exits non-zero on errors it doubles as a pre-training gate. Pair it with
-`dedupe_images.py` (duplicate frames) and `prepare_images.py` (fixing what it flags).
+`dedupe_images.py` (duplicate frames), `caption_stats.py` (tag distribution) and
+`prepare_images.py` (fixing what it flags).
 
 Usage:
     # Gate a dataset: exits 1 if anything is actually broken.
@@ -24,6 +35,9 @@ Usage:
 
     # Also warn about small images, and accept images without captions.
     uv run tools/lint_dataset.py --dir ./train --min-size 1024 --no-require-caption
+
+    # Check every caption carries the trigger word you plan to train with.
+    uv run tools/lint_dataset.py --dir ./train --trigger mychar
 
 Requires Pillow. Exits 0 when clean or warnings-only, 1 on errors, 2 on a bad --dir.
 """
@@ -41,6 +55,7 @@ from dsutils import (
     normalize_ext,
     normalize_exts,
     paired_caption,
+    split_tags,
 )
 from PIL import Image
 
@@ -79,7 +94,30 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Treat a missing caption as a warning instead of an error.",
     )
+    p.add_argument(
+        "--trigger",
+        metavar="WORD",
+        help="Warn about captions missing this trigger word (matched as a whole tag, "
+        "case-insensitively).",
+    )
+    p.add_argument(
+        "--min-contrast",
+        type=int,
+        default=8,
+        help="Warn if an image's grayscale range is below this (0-255). 0 = off.",
+    )
     return p.parse_args(argv)
+
+
+def grayscale_range(im: Image.Image) -> int:
+    """Span between the darkest and lightest grey level present in *im*, 0-255.
+
+    0 means every pixel is the same shade — a solid fill, a blown-out background, or a
+    transparent PNG flattened to one colour. Read off the histogram rather than
+    getextrema() so the result is a plain int for any input mode.
+    """
+    used = [level for level, count in enumerate(im.convert("L").histogram()) if count]
+    return used[-1] - used[0] if used else 0
 
 
 def report(title: str, groups: dict[str, list[str]]) -> int:
@@ -103,6 +141,7 @@ def main(argv: list[str] | None = None) -> int:
 
     exts = normalize_exts(args.image_exts)
     caption_ext = normalize_ext(args.caption_ext)
+    trigger = args.trigger.strip().lower() if args.trigger else None
     images = list_images(args.dir, exts)
 
     errors: defaultdict[str, list[str]] = defaultdict(list)  # category -> [file, ...]
@@ -112,13 +151,17 @@ def main(argv: list[str] | None = None) -> int:
     for img in images:
         image_stems.add(img.stem)
 
-        # Caption presence / emptiness.
+        # Caption presence / emptiness / trigger word.
         cap = paired_caption(img, caption_ext)
         if cap is None:
             bucket = warnings if args.no_require_caption else errors
             bucket["missing caption"].append(img.name)
-        elif not cap.read_text(encoding="utf-8", errors="replace").strip():
-            errors["empty caption"].append(img.name)
+        else:
+            text = cap.read_text(encoding="utf-8", errors="replace")
+            if not text.strip():
+                errors["empty caption"].append(img.name)
+            elif trigger and trigger not in {t.lower() for t in split_tags(text)}:
+                warnings["trigger missing"].append(img.name)
 
         # Decode the image to catch corruption; then inspect mode/size/format.
         try:
@@ -126,6 +169,7 @@ def main(argv: list[str] | None = None) -> int:
                 im.load()
                 mode, (w, h) = im.mode, im.size
                 fmt = im.format
+                contrast = grayscale_range(im)
         except Exception as e:  # any decode failure means the image is unusable
             errors["corrupt image"].append(f"{img.name} ({e})")
             continue
@@ -134,6 +178,8 @@ def main(argv: list[str] | None = None) -> int:
             warnings["non-RGB mode"].append(f"{img.name} ({mode})")
         if args.min_size and min(w, h) < args.min_size:
             warnings["below min-size"].append(f"{img.name} ({w}x{h})")
+        if args.min_contrast and contrast < args.min_contrast:
+            warnings["near-blank image"].append(f"{img.name} (range {contrast})")
         expected = _EXT_FORMAT.get(img.suffix.lower())
         if expected and fmt and fmt != expected:
             warnings["extension mismatch"].append(f"{img.name} (is {fmt})")

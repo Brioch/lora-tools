@@ -7,6 +7,18 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- `caption_stats` — tag distribution across a dataset's captions, calling out
+  ubiquitous tags (no discriminative signal) and rare ones (tagger noise), using the
+  same tokenizer as `edit_captions` so the counts match what an edit would touch.
+- `split_dataset` — hold out a validation set without leaking near-duplicates, by
+  splitting on perceptual-hash clusters rather than individual images so a frame and
+  its near-twins never straddle the split.
+- `compare_loras` — per-module ΔW cosine similarity, magnitude ratio and relative
+  change between two adapters, separating "learned something different" from "same
+  thing, louder". Computed without materializing ΔW.
+- `lint_dataset`: `--trigger WORD` warns about captions missing the trigger word
+  (matched as a whole tag), and near-blank images are now flagged by grayscale
+  dynamic range (`--min-contrast`, on by default).
 - Dataset preparation tools: `lint_dataset` (validate image + caption pairs, exits
   non-zero on real problems), `prepare_images` (EXIF orientation, RGB flattening,
   format conversion, max-edge downscaling; writes to a sibling `<dir>.prepared/`

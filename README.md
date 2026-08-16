@@ -35,6 +35,9 @@ uv run tools/inspect_lora.py path/to/lora.safetensors
 | `calc_training.py` | Turn an image count + step budget into a training schedule |
 | `compare_datasets.py` | Flag validation images that duplicate training images |
 | `lint_dataset.py` | Validate a dataset's image + caption pairs before training |
+| `caption_stats.py` | Show the tag distribution: what's ubiquitous, what's noise |
+| `split_dataset.py` | Hold out a validation set without leaking near-duplicates |
+| `compare_loras.py` | Diff two adapters: same direction, or just louder? |
 | `prepare_images.py` | Normalize images: orientation, mode, format, longest edge |
 | `dedupe_images.py` | Remove exact and near-duplicate images (and their captions) |
 | `edit_captions.py` | Batch-edit caption tag lists (replace, remove, add, dedupe, sort) |

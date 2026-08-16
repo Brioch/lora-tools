@@ -19,10 +19,13 @@ Pillow). Every script also has a `--help`.
 - [Removing duplicate images](#removing-duplicate-images-toolsdedupe_imagespy) — `dedupe_images.py`
 - [Batch-editing captions](#batch-editing-captions-toolsedit_captionspy) — `edit_captions.py`
 - [Balancing a regularization set](#balancing-a-regularization-set-toolsbalance_regularizationpy) — `balance_regularization.py`
+- [Caption tag statistics](#caption-tag-statistics-toolscaption_statspy) — `caption_stats.py`
+- [Splitting off a validation set](#splitting-off-a-validation-set-toolssplit_datasetpy) — `split_dataset.py`
+- [Comparing two adapters](#comparing-two-adapters-toolscompare_loraspy) — `compare_loras.py`
 
-The five dataset tools share a small helper module, `tools/dsutils.py` (extension
-normalization, image/caption pairing, dHash). It is imported rather than run, so it
-has no CLI of its own.
+The dataset tools share a small helper module, `tools/dsutils.py` (extension
+normalization, image/caption pairing, caption tokenizing, dHash and near-duplicate
+clustering). It is imported rather than run, so it has no CLI of its own.
 
 ## Inspect LoRA metadata
 
@@ -356,10 +359,20 @@ pre-training gate:
 | Severity | Exit | Checks |
 |----------|------|--------|
 | `ERRORS` | 1 | corrupt/unreadable image, image with no caption, empty caption |
-| `WARNINGS` | 0 | orphan caption (no image), non-RGB mode, image below `--min-size`, extension not matching the real format |
+| `WARNINGS` | 0 | orphan caption (no image), non-RGB mode, image below `--min-size`, extension not matching the real format, near-blank image, caption missing the `--trigger` word |
+
+Two of those warnings are worth calling out. `--trigger WORD` catches the mistake that
+silently wastes a whole run — training with a trigger word that some captions spell
+differently or omit entirely. It is matched as a whole tag, case-insensitively, with the
+same tokenizer `edit_captions.py` and `caption_stats.py` use, so `mychar` will not match
+`mycharacter`. And near-blank images are caught by grayscale dynamic range: a flat
+frame — a blown-out background, a solid fill, a transparent PNG flattened to one colour
+— teaches nothing but still occupies a training slot. That check is on by default at a
+conservative threshold; no real photograph comes close to tripping it.
 
 Pair it with [`dedupe_images.py`](#removing-duplicate-images-toolsdedupe_imagespy)
-for duplicate frames and
+for duplicate frames, [`caption_stats.py`](#caption-tag-statistics-toolscaption_statspy)
+for the tag distribution, and
 [`prepare_images.py`](#normalizing-dataset-images-toolsprepare_imagespy) to fix most
 of what it warns about. Requires Pillow.
 
@@ -378,6 +391,8 @@ uv run tools/lint_dataset.py --dir ./train --min-size 1024 --no-require-caption
 | `--caption-ext EXT` | Caption extension paired with each image (default `.txt`). |
 | `--min-size N` | Warn if an image's shortest edge is below this, in px (default 0 = off). |
 | `--no-require-caption` | Treat a missing caption as a warning instead of an error. |
+| `--trigger WORD` | Warn about captions missing this trigger word (whole-tag, case-insensitive). |
+| `--min-contrast N` | Warn if an image's grayscale range is below this, 0-255 (default 8; 0 = off). |
 
 
 ## Normalizing dataset images (`tools/prepare_images.py`)
@@ -533,3 +548,156 @@ uv run tools/balance_regularization.py \
 
 > **Note:** a pool smaller than the shortfall is not an error — the tool takes what
 > it can, warns on stderr how many the set is short by, and still exits 0.
+
+
+## Caption tag statistics (`tools/caption_stats.py`)
+
+The read-only counterpart to
+[`edit_captions.py`](#batch-editing-captions-toolsedit_captionspy): that tool changes
+tags, this one shows which ones are worth changing. It reads captions with the same
+tokenizer, so the counts match exactly what an edit would act on, and calls out the
+two ends of the distribution that actually drive a decision:
+
+- **ubiquitous** tags sit in nearly every caption. They carry no discriminative signal
+  and compete with your trigger word for the concept — so they are usually worth
+  dropping, *unless* one of them is the trigger word, which is precisely where you want
+  to see 100%.
+- **rare** tags occur once or twice. Usually tagger noise or typos (`bluu eyes`), which
+  bloat the vocabulary without ever being learned.
+
+The two lists are kept disjoint, so a trigger word that is under the absolute `--rare`
+cutoff on a small dataset is never mislabelled as noise. Tags are counted
+case-insensitively and reported under their most common spelling. Pure stdlib.
+
+```bash
+# What is in these captions?
+uv run tools/caption_stats.py --dir ./train
+
+# Widen the report, and treat a tag with 3 or fewer occurrences as rare.
+uv run tools/caption_stats.py --dir ./train --top 50 --rare 3
+
+# Machine-readable, for diffing two datasets or scripting an edit.
+uv run tools/caption_stats.py --dir ./train --json
+```
+
+| Flag | Description |
+|------|-------------|
+| `--dir DIR` | Dataset directory (required). |
+| `--caption-ext EXT` | Caption extension to read (default `.txt`). |
+| `--top N` | How many of the most frequent tags to list (default 25). |
+| `--rare N` | Report tags occurring this many times or fewer (default 2; 0 = skip). |
+| `--ubiquitous-pct P` | Report tags in at least this % of captions (default 90; 0 = skip). |
+| `--json` | Emit machine-readable JSON. |
+
+Frequencies are ranked by **caption count**, not raw occurrences: "how many captions
+contain this tag" is what decides whether a tag is doing work, while a tag repeated
+three times inside one caption is a tagger artifact. Both numbers are reported.
+
+
+## Splitting off a validation set (`tools/split_dataset.py`)
+
+Where [`compare_datasets.py`](#checking-a-validation-set-for-duplicates-toolscompare_datasetspy)
+detects a leaky train/validation split after the fact, this prevents one. A
+near-duplicate shared between the two sets quietly breaks validation — as the model
+memorizes the training frame its loss on the near-clone falls too, so the validation
+curve keeps improving while the model overfits (see
+[monitoring-training.md](monitoring-training.md#how-close-to-the-training-data-is-too-close)).
+
+The trick is to split by **cluster, not by image**. Every image is perceptually hashed
+and images within `--threshold` Hamming distance are grouped transitively, then whole
+clusters move to the validation set. A frame and its near-twins therefore always land
+on the same side, and no pair can straddle the split.
+
+That granularity makes the requested count a target rather than a guarantee: if
+clusters do not add up, the tool holds out the closest it can and says so on stderr.
+When the entire dataset is one near-duplicate cluster there is no leak-free split at
+all, and it exits 2 rather than producing a worthless one.
+
+Images **move** out of the training directory by default — a held-out image still
+sitting in the training set is not held out — so moves prompt for confirmation unless
+`-y` or `--dry-run`. Use `--copy` when your master copy lives elsewhere. Requires
+Pillow.
+
+```bash
+# Hold out 10% of ./train into ./train.val, reproducibly.
+uv run tools/split_dataset.py --dir ./train --fraction 0.1 --seed 0
+
+# An exact count, to a directory you name, previewing first.
+uv run tools/split_dataset.py --dir ./train --count 8 --val-dir ./val --dry-run
+```
+
+| Flag | Description |
+|------|-------------|
+| `--dir DIR` | Training dataset directory (required). |
+| `--val-dir DIR` | Destination for the validation set (default: a sibling `<dir>.val`). |
+| `--fraction F` | Share of images to hold out, 0-1 exclusive (default 0.1). |
+| `--count N` | Exact number of images to hold out; overrides `--fraction`. |
+| `--threshold N` | Max dHash distance for two images to count as near-duplicates (default 5). |
+| `--seed N` | Seed for a reproducible split (default: unseeded). |
+| `--copy` | Copy instead of moving, leaving `--dir` intact. |
+| `--image-exts EXT ...` | Image extensions to consider (default `.png .jpg .jpeg .webp .bmp`). |
+| `--caption-ext EXT` | Caption extension moved alongside each image (default `.txt`). |
+| `--dry-run` | Report the planned split without touching the filesystem. |
+| `-y`, `--yes` | Skip the confirmation prompt before moving files. |
+
+> **Tip:** run it with `--dry-run` first. The report lists every near-duplicate cluster
+> it found, which is worth reading on its own — clusters you did not expect usually mean
+> the dataset has more redundancy than you thought, and
+> [`dedupe_images.py`](#removing-duplicate-images-toolsdedupe_imagespy) is the next stop.
+
+
+## Comparing two adapters (`tools/compare_loras.py`)
+
+[`lora_health.py`](#lora-weight-health-toolslora_healthpy) reads one file and
+[`health_sweep.py`](#checkpoint-health-sweep-toolshealth_sweeppy) tracks magnitude
+across many, but neither answers the question you actually have when comparing two
+runs: did this adapter learn something **different**, or the same thing at a different
+strength? Magnitude alone cannot separate those — halving alpha and retraining from
+scratch can move `‖ΔW‖_F` by the same amount.
+
+For every module the two files share, it reports:
+
+| Column | Meaning |
+|--------|---------|
+| `cos` | Cosine similarity of the two effective ΔW matrices. `1.00` = same direction, scale aside; toward `0` = genuinely different directions; negative = the updates oppose each other. |
+| `ratio` | `‖ΔW_b‖_F / ‖ΔW_a‖_F` — how much louder b is than a. |
+| `rel Δ` | `‖ΔW_b − ΔW_a‖_F / ‖ΔW_a‖_F` — total relative change, direction and magnitude together. |
+
+Reading it: **high `cos` with `ratio` away from 1** is a pure strength change, the same
+adaptation rescaled — often exactly what an alpha edit does. **Low `cos`** is a
+different adaptation. **`cos` ≈ 1 with `ratio` ≈ 1** across the board means the two
+checkpoints have converged and the later one is not learning anything new. The report
+prints a one-line *read* of the medians so the table is not interpreted cold.
+
+```bash
+# Two epochs of the same run — has it converged?
+uv run tools/compare_loras.py epoch30.safetensors epoch40.safetensors
+
+# Two settings — did lowering alpha change what was learned, or only how loud?
+uv run tools/compare_loras.py alpha16.safetensors alpha8.safetensors --all
+
+# Only the attention modules, machine-readable.
+uv run tools/compare_loras.py a.safetensors b.safetensors --grep attn --json
+```
+
+| Flag | Description |
+|------|-------------|
+| `a` | First `.safetensors` LoRA, the baseline (positional). |
+| `b` | Second `.safetensors` LoRA, compared against `a` (positional). |
+| `--all` | Print every module rather than the most-diverged `--top`. |
+| `--top N` | How many of the lowest-`cos` modules to show (default 12). |
+| `--json` | Emit machine-readable JSON. |
+| `--grep SUBSTR` | Only modules whose keys contain `SUBSTR`. |
+
+Ranks may differ between the two files — comparing a dim-16 run against a dim-32 one is
+fine, since ΔW has the same shape either way. Modules present in only one file, or whose
+shapes genuinely disagree (a different base model), are counted and named rather than
+silently dropped. Non-finite modules are flagged instead of scored.
+
+It needs **numpy**, and reports the same `‖ΔW‖_F` as `lora_health.py` for the same file
+— alpha/rank scale included — so numbers are comparable across the two tools.
+
+> **Why it is cheap.** No ΔW is ever materialized at full out×in size. For LoRA the
+> Frobenius inner product `⟨U₁D₁, U₂D₂⟩` reduces to `trace((U₁ᵀU₂)(D₂D₁ᵀ))`, a trace
+> over two `r×r` cores; for LoKr it factorizes as `⟨A₁,A₂⟩·⟨B₁,B₂⟩` across the Kronecker
+> product. Both shortcuts are checked against brute-force construction in the tests.

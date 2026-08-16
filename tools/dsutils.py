@@ -4,10 +4,11 @@
 # ///
 """Shared helpers for the dataset tools.
 
-Imported by `lint_dataset.py`, `edit_captions.py`, `prepare_images.py`,
-`dedupe_images.py` and `balance_regularization.py`. This is a module rather than a
-CLI, so it has no `main()`; the PEP 723 header above is there so the tools that
-import it stay runnable with `uv run tools/<script>.py`.
+Imported by `lint_dataset.py`, `edit_captions.py`, `caption_stats.py`,
+`prepare_images.py`, `dedupe_images.py`, `split_dataset.py` and
+`balance_regularization.py`. This is a module rather than a CLI, so it has no
+`main()`; the PEP 723 header above is there so the tools that import it stay
+runnable with `uv run tools/<script>.py`.
 
 Nothing here imports Pillow at module level — `dhash()` pulls it in on first call —
 so the caption-only tools stay pure stdlib.
@@ -59,6 +60,15 @@ def paired_caption(image: Path, caption_ext: str) -> Path | None:
     return caption if caption.exists() else None
 
 
+def split_tags(text: str) -> list[str]:
+    """Split a caption into its non-empty, stripped comma-separated tags.
+
+    Shared so every tool tokenizes captions the same way — a report that counted
+    tags differently from the tool that edits them would be worse than no report.
+    """
+    return [t.strip() for t in text.split(",") if t.strip()]
+
+
 def dhash(image: PILImage, size: int = 8) -> int:
     """Difference hash: compare each pixel to its right neighbour. size*size bits.
 
@@ -81,3 +91,31 @@ def dhash(image: PILImage, size: int = 8) -> int:
 def hamming(a: int, b: int) -> int:
     """Number of differing bits between two integer fingerprints."""
     return bin(a ^ b).count("1")
+
+
+def group_similar(hashes: dict[Path, int], threshold: int) -> list[list[Path]]:
+    """Cluster paths whose perceptual hashes are within *threshold* bits.
+
+    Union-find over every pair, so transitively-similar images end up in one
+    cluster (a is like b, b is like c => all three group). Includes singletons;
+    callers wanting only real duplicate groups filter on len(group) > 1. Groups and
+    their members come back name-sorted, so the output is deterministic.
+    """
+    items = sorted(hashes.items())
+    parent: dict[Path, Path] = {path: path for path, _ in items}
+
+    def find(x: Path) -> Path:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for i in range(len(items)):
+        for j in range(i + 1, len(items)):
+            if hamming(items[i][1], items[j][1]) <= threshold:
+                parent[find(items[i][0])] = find(items[j][0])
+
+    groups: dict[Path, list[Path]] = {}
+    for path, _ in items:
+        groups.setdefault(find(path), []).append(path)
+    return sorted((sorted(g) for g in groups.values()), key=lambda g: g[0])

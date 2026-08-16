@@ -41,7 +41,7 @@ from dsutils import (
     DEFAULT_IMAGE_EXTS,
     HelpFormatter,
     dhash,
-    hamming,
+    group_similar,
     list_images,
     normalize_ext,
     normalize_exts,
@@ -127,7 +127,7 @@ def group_exact(images: list[Path]) -> list[list[Path]]:
 
 
 def group_near(images: list[Path], threshold: int) -> list[list[Path]]:
-    """Union-find grouping of images whose dHash is within *threshold*."""
+    """Group images whose dHash is within *threshold*; only groups of 2+ come back."""
     hashes: dict[Path, int] = {}
     for img in images:
         try:
@@ -135,28 +135,7 @@ def group_near(images: list[Path], threshold: int) -> list[list[Path]]:
                 hashes[img] = dhash(im)
         except Exception as e:  # corrupt/unsupported — skip, don't abort the run
             print(f"skip (unreadable): {img.name} ({e})", file=sys.stderr)
-
-    items = list(hashes.items())
-    parent: dict[Path, Path] = {img: img for img, _ in items}
-
-    def find(x: Path) -> Path:
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
-
-    def union(a: Path, b: Path) -> None:
-        parent[find(a)] = find(b)
-
-    for i in range(len(items)):
-        for j in range(i + 1, len(items)):
-            if hamming(items[i][1], items[j][1]) <= threshold:
-                union(items[i][0], items[j][0])
-
-    groups: dict[Path, list[Path]] = {}
-    for img, _ in items:
-        groups.setdefault(find(img), []).append(img)
-    return [g for g in groups.values() if len(g) > 1]
+    return [g for g in group_similar(hashes, threshold) if len(g) > 1]
 
 
 def main(argv: list[str] | None = None) -> int:
